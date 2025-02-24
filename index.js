@@ -45,10 +45,8 @@ const locations = {
     }
 };
 
-// Fonction pour récupérer un Pokémon par son nom depuis pkmnList
-function getPokemonByName(name) {
-    return Object.values(pkmnList).find(pokemon => pokemon.name.toLowerCase() === name.toLowerCase()) || null;
-}
+// Après la déclaration des locations
+const battleStates = {};
 
 client.once('ready', () => {
     console.log(`${client.user.tag} est prêt à l'action !`);
@@ -159,6 +157,10 @@ client.on('interactionCreate', interaction => {
         handleStarterSelection(interaction);
     } else if (interaction.customId.startsWith('action_')) {
         handleLocationAction(interaction);
+    } else if (interaction.customId.startsWith('battle_')) {
+        handleBattle(interaction);
+    } else if (interaction.customId === 'flee') {
+        handleFlee(interaction);
     } else {
         handleLocationExploration(interaction);
     }
@@ -170,8 +172,22 @@ function handleStarterSelection(interaction) {
     let chosenStarter = starters.find(starter => starter.name.toLowerCase() === interaction.customId.toLowerCase());
 
     if (chosenStarter) {
-        players[userId] = { location: 'bourg-palette', pokemons: [chosenStarter] };
-        interaction.reply(`${interaction.user.username}, tu as choisi **${chosenStarter.name}** comme starter ! Utilise ${PREFIX} explore pour commencer ton aventure.`);
+        // Ajout des stats de base
+        chosenStarter = {
+            ...chosenStarter,
+            level: 5,
+            exp: 0,
+            maxExp: 100,
+            hp: 20,
+            maxHp: 20
+        };
+        
+        players[userId] = { 
+            location: 'bourg-palette', 
+            pokemons: [chosenStarter]
+        };
+        
+        interaction.reply(`${interaction.user.username}, tu as choisi **${chosenStarter.name}** niveau ${chosenStarter.level} comme starter ! Utilise ${PREFIX} explore pour commencer ton aventure.`);
     }
 }
 
@@ -218,8 +234,47 @@ function handleWildPokemonSearch(interaction, currentLocation) {
         interaction.reply({ content: "Il n'y a pas de Pokémon sauvages ici.", ephemeral: true });
         return;
     }
+    
     const foundPokemon = wildPokemons[Math.floor(Math.random() * wildPokemons.length)];
-    interaction.reply(`${interaction.user.username}, tu as trouvé un **${foundPokemon.name}** sauvage ! Que souhaites-tu faire ?`);
+    const row = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId(`battle_${foundPokemon.name.toLowerCase()}`)
+                .setLabel('Combattre')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('flee')
+                .setLabel('Fuir')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+    battleStates[interaction.user.id] = {
+        wildPokemon: foundPokemon,
+        playerPokemon: players[interaction.user.id].pokemons[0]
+    };
+
+    interaction.reply({ 
+        content: `${interaction.user.username}, tu as trouvé un **${foundPokemon.name}** sauvage ! Que souhaites-tu faire ?`,
+        components: [row]
+    });
+}
+
+function handleBattle(interaction) {
+    const battleState = battleStates[interaction.user.id];
+    if (!battleState) {
+        interaction.reply({ content: "Aucun combat en cours.", ephemeral: true });
+        return;
+    }
+
+    const damage = Math.floor(Math.random() * 20) + 10;
+    interaction.reply(
+        `**${battleState.playerPokemon.name}** attaque **${battleState.wildPokemon.name}** et inflige ${damage} points de dégâts !`
+    );
+}
+
+function handleFlee(interaction) {
+    delete battleStates[interaction.user.id];
+    interaction.reply("Tu as fui le combat !");
 }
 
 // Connecter le bot

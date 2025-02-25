@@ -29,6 +29,10 @@ const TYPE_EMOJIS = {
     "Fée": "🎀"
 };
 
+// Ajoutez ces imports au début du fichier
+const Canvas = require('canvas');
+const { AttachmentBuilder } = require('discord.js');
+
 // Fonction pour récupérer un Pokémon par son nom depuis pkmnList
 function getPokemonByName(name) {
     return Object.values(pkmnList).find(pokemon => pokemon.name.toLowerCase() === name.toLowerCase()) || null;
@@ -389,8 +393,60 @@ function getTypeEmojis(pokemon) {
     return pokemon.types.map(type => TYPE_EMOJIS[type] || "❓").join(" ");
 }
 
-// Modifiez la fonction handleBattle
-function handleBattle(interaction) {
+// Ajoutez cette fonction pour créer l'image de combat
+async function createBattleImage(playerPokemonId, wildPokemonId) {
+    const canvas = Canvas.createCanvas(512, 256); // Doublons la taille pour plus d'espace
+    const ctx = canvas.getContext('2d');
+
+    // Définir un fond noir semi-transparent
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Chargement des images
+    const playerSprite = await Canvas.loadImage(`${POKEMON_SPRITE_URL}${playerPokemonId}.png`);
+    const wildSprite = await Canvas.loadImage(`${POKEMON_SPRITE_URL}${wildPokemonId}.png`);
+
+    // Dessiner le Pokémon du joueur à gauche
+    ctx.drawImage(playerSprite, 64, 48, 128, 128);
+    
+    // Dessiner le Pokémon sauvage à droite
+    ctx.drawImage(wildSprite, 320, 48, 128, 128);
+
+    // Configurer le style du VS
+    ctx.font = 'bold 72px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Créer l'effet d'ombre pour le VS
+    ctx.fillStyle = '#FF4400';
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 6;
+    
+    // Position du VS
+    const x = canvas.width / 2;
+    const y = canvas.height / 2;
+
+    // Dessiner l'ombre du VS
+    ctx.strokeText('VS', x, y);
+    
+    // Dessiner le VS avec un dégradé
+    const gradient = ctx.createLinearGradient(x - 30, y - 30, x + 30, y + 30);
+    gradient.addColorStop(0, '#FF4400');
+    gradient.addColorStop(0.5, '#FFFF00');
+    gradient.addColorStop(1, '#FF4400');
+    ctx.fillStyle = gradient;
+    ctx.fillText('VS', x, y);
+
+    // Ajouter un effet de lueur
+    ctx.shadowColor = '#FF4400';
+    ctx.shadowBlur = 15;
+    ctx.fillText('VS', x, y);
+
+    return canvas.toBuffer();
+}
+
+// Modifiez la fonction handleBattle pour utiliser l'image fusionnée
+async function handleBattle(interaction) {
     const battleState = battleStates[interaction.user.id];
     if (!battleState) {
         interaction.reply({ content: "Aucun combat en cours.", ephemeral: true });
@@ -403,34 +459,38 @@ function handleBattle(interaction) {
     const playerMaxHP = playerPokemon.stats.hp;
     const wildMaxHP = wildPokemon.stats.hp;
 
+    // Créer l'image de combat
+    const battleImage = await createBattleImage(
+        getPokemonId(playerPokemon.name),
+        getPokemonId(wildPokemon.name)
+    );
+    
+    // Créer l'attachment pour Discord
+    const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
+
     const battleEmbed = {
         color: 0x0099FF,
         title: '⚔️ Combat Pokémon',
+        description: '\u200b',
         fields: [
             {
                 name: `${getTypeEmojis(playerPokemon)} ${playerPokemon.name} Nv.${playerPokemon.level}`,
-                value: createHPBar(playerPokemon.currentHp, playerMaxHP),
-                inline: false
+                value: `${createHPBar(playerPokemon.currentHp, playerMaxHP)}`,
+                inline: true
+            },
+            {
+                name: '\u200b',
+                value: 'VS',
+                inline: true
             },
             {
                 name: `${getTypeEmojis(wildPokemon)} ${wildPokemon.name} Nv.${wildPokemon.level}`,
-                value: createHPBar(wildPokemon.currentHp, wildMaxHP),
-                inline: false
+                value: `${createHPBar(wildPokemon.currentHp, wildMaxHP)}`,
+                inline: true
             }
         ],
-        author: {
-            name: "Ton Pokémon",
-            iconURL: `${POKEMON_SPRITE_URL}${getPokemonId(playerPokemon.name)}.png`
-        },
-        thumbnail: {
-            url: `${POKEMON_SPRITE_URL}${getPokemonId(playerPokemon.name)}.png`
-        },
         image: {
-            url: `${POKEMON_SPRITE_URL}${getPokemonId(wildPokemon.name)}.png`
-        },
-        footer: {
-            text: "Pokémon Sauvage",
-            iconURL: `${POKEMON_SPRITE_URL}${getPokemonId(wildPokemon.name)}.png`
+            url: 'attachment://battle.png'
         }
     };
 
@@ -446,6 +506,7 @@ function handleBattle(interaction) {
 
     interaction.reply({
         embeds: [battleEmbed],
+        files: [attachment],
         content: `Que doit faire **${battleState.playerPokemon.name}** ?`,
         components: [row]
     });

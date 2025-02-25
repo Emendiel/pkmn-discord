@@ -412,8 +412,8 @@ function drawKOCross(ctx, x, y, size) {
     ctx.stroke();
 }
 
-// Modifiez la fonction createBattleImage pour prendre en compte les KO
-async function createBattleImage(playerPokemonId, wildPokemonId, playerHP = 1, wildHP = 1) {
+// Modifiez la fonction createBattleImage pour utiliser battleState
+async function createBattleImage(battleState) {
     const canvas = Canvas.createCanvas(512, 256);
     const ctx = canvas.getContext('2d');
 
@@ -422,8 +422,12 @@ async function createBattleImage(playerPokemonId, wildPokemonId, playerHP = 1, w
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Chargement des images
-    const playerSprite = await Canvas.loadImage(`${POKEMON_SPRITE_URL}${playerPokemonId}.png`);
-    const wildSprite = await Canvas.loadImage(`${POKEMON_SPRITE_URL}${wildPokemonId}.png`);
+    const playerSprite = await Canvas.loadImage(
+        `${POKEMON_SPRITE_URL}${getPokemonId(battleState.playerPokemon.name)}.png`
+    );
+    const wildSprite = await Canvas.loadImage(
+        `${POKEMON_SPRITE_URL}${getPokemonId(battleState.wildPokemon.name)}.png`
+    );
 
     // Position des Pokémon
     const playerX = 64;
@@ -433,13 +437,13 @@ async function createBattleImage(playerPokemonId, wildPokemonId, playerHP = 1, w
 
     // Dessiner le Pokémon du joueur à gauche
     ctx.drawImage(playerSprite, playerX, y, size, size);
-    if (playerHP <= 0) {
+    if (battleState.playerPokemon.currentHp <= 0) {
         drawKOCross(ctx, playerX + size/2, y + size/2, size);
     }
     
     // Dessiner le Pokémon sauvage à droite
     ctx.drawImage(wildSprite, wildX, y, size, size);
-    if (wildHP <= 0) {
+    if (battleState.wildPokemon.currentHp <= 0) {
         drawKOCross(ctx, wildX + size/2, y + size/2, size);
     }
 
@@ -491,12 +495,7 @@ async function handleBattle(interaction) {
     const wildMaxHP = wildPokemon.stats.hp;
 
     // Créer l'image de combat
-    const battleImage = await createBattleImage(
-        getPokemonId(playerPokemon.name),
-        getPokemonId(wildPokemon.name),
-        playerPokemon.currentHp,
-        wildPokemon.currentHp
-    );
+    const battleImage = await createBattleImage(battleState);
     
     // Créer l'attachment pour Discord
     const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
@@ -584,12 +583,7 @@ async function handleAttack(interaction, moveName) {
     battleMessage += `**${firstAttacker.pokemon.name}** utilise ${firstAttacker.move.name} et inflige ${firstDamage} dégâts à **${firstAttacker.opponent.name}** !`;
 
     // Créer l'image de combat
-    const battleImage = await createBattleImage(
-        getPokemonId(battleState.playerPokemon.name),
-        getPokemonId(battleState.wildPokemon.name),
-        battleState.playerPokemon.currentHp,
-        battleState.wildPokemon.currentHp
-    );
+    const battleImage = await createBattleImage(battleState);
     
     // Créer l'attachment pour Discord
     const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });

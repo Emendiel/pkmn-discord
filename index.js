@@ -8,6 +8,27 @@ const movesList = require('./moves.json');
 const POKEMON_SPRITE_URL = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/";
 const HP_BAR_LENGTH = 10; // Longueur de la barre de vie en caractères
 
+// Ajoutez ces constantes pour les émojis de type
+const TYPE_EMOJIS = {
+    "Normal": "⚪",
+    "Feu": "🔥",
+    "Eau": "💧",
+    "Plante": "🌱",
+    "Électrique": "⚡",
+    "Glace": "❄️",
+    "Combat": "👊",
+    "Poison": "☠️",
+    "Sol": "🌍",
+    "Vol": "🦅",
+    "Psy": "🔮",
+    "Insecte": "🐛",
+    "Roche": "🪨",
+    "Spectre": "👻",
+    "Dragon": "🐉",
+    "Acier": "⚔️",
+    "Fée": "🎀"
+};
+
 // Fonction pour récupérer un Pokémon par son nom depuis pkmnList
 function getPokemonByName(name) {
     return Object.values(pkmnList).find(pokemon => pokemon.name.toLowerCase() === name.toLowerCase()) || null;
@@ -363,6 +384,11 @@ function createHPBar(currentHP, maxHP) {
     return `${color} ${filledSection}${emptySection} ${Math.ceil(currentHP)}/${maxHP}`;
 }
 
+// Ajoutez cette fonction pour obtenir les émojis de type d'un Pokémon
+function getTypeEmojis(pokemon) {
+    return pokemon.types.map(type => TYPE_EMOJIS[type] || "❓").join(" ");
+}
+
 // Modifiez la fonction handleBattle
 function handleBattle(interaction) {
     const battleState = battleStates[interaction.user.id];
@@ -377,15 +403,36 @@ function handleBattle(interaction) {
     const playerMaxHP = playerPokemon.stats.hp;
     const wildMaxHP = wildPokemon.stats.hp;
 
-    const battleStatus = `
-🔵 **${playerPokemon.name}** Nv.${playerPokemon.level}
-${createHPBar(playerPokemon.currentHp, playerMaxHP)}
-${POKEMON_SPRITE_URL}${getPokemonId(playerPokemon.name)}.png
-
-⭕ **${wildPokemon.name}** Nv.${wildPokemon.level}
-${createHPBar(wildPokemon.currentHp, wildMaxHP)}
-${POKEMON_SPRITE_URL}${getPokemonId(wildPokemon.name)}.png
-`;
+    const battleEmbed = {
+        color: 0x0099FF,
+        title: '⚔️ Combat Pokémon',
+        fields: [
+            {
+                name: `${getTypeEmojis(playerPokemon)} ${playerPokemon.name} Nv.${playerPokemon.level}`,
+                value: createHPBar(playerPokemon.currentHp, playerMaxHP),
+                inline: false
+            },
+            {
+                name: `${getTypeEmojis(wildPokemon)} ${wildPokemon.name} Nv.${wildPokemon.level}`,
+                value: createHPBar(wildPokemon.currentHp, wildMaxHP),
+                inline: false
+            }
+        ],
+        author: {
+            name: "Ton Pokémon",
+            iconURL: `${POKEMON_SPRITE_URL}${getPokemonId(playerPokemon.name)}.png`
+        },
+        thumbnail: {
+            url: `${POKEMON_SPRITE_URL}${getPokemonId(playerPokemon.name)}.png`
+        },
+        image: {
+            url: `${POKEMON_SPRITE_URL}${getPokemonId(wildPokemon.name)}.png`
+        },
+        footer: {
+            text: "Pokémon Sauvage",
+            iconURL: `${POKEMON_SPRITE_URL}${getPokemonId(wildPokemon.name)}.png`
+        }
+    };
 
     const row = new ActionRowBuilder();
     battleState.playerPokemon.moves.forEach(move => {
@@ -398,12 +445,13 @@ ${POKEMON_SPRITE_URL}${getPokemonId(wildPokemon.name)}.png
     });
 
     interaction.reply({
-        content: `${battleStatus}\nQue doit faire **${battleState.playerPokemon.name}** ?`,
+        embeds: [battleEmbed],
+        content: `Que doit faire **${battleState.playerPokemon.name}** ?`,
         components: [row]
     });
 }
 
-// Modifiez également handleAttack pour inclure les barres de vie
+// Modifiez également la fonction handleAttack pour utiliser les embeds
 function handleAttack(interaction, moveName) {
     const battleState = battleStates[interaction.user.id];
     if (!battleState) {

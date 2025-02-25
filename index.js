@@ -512,8 +512,8 @@ async function handleBattle(interaction) {
     });
 }
 
-// Modifiez également la fonction handleAttack pour utiliser les embeds
-function handleAttack(interaction, moveName) {
+// Modifiez la fonction handleAttack pour utiliser le même format que handleBattle
+async function handleAttack(interaction, moveName) {
     const battleState = battleStates[interaction.user.id];
     if (!battleState) {
         interaction.reply({ content: "Aucun combat en cours.", ephemeral: true });
@@ -550,33 +550,58 @@ function handleAttack(interaction, moveName) {
     
     battleMessage += `**${firstAttacker.pokemon.name}** utilise ${firstAttacker.move.name} et inflige ${firstDamage} dégâts à **${firstAttacker.opponent.name}** !`;
 
-    // Vérifie si le combat est terminé après la première attaque
+    // Créer l'image de combat
+    const battleImage = await createBattleImage(
+        getPokemonId(battleState.playerPokemon.name),
+        getPokemonId(battleState.wildPokemon.name)
+    );
+    
+    // Créer l'attachment pour Discord
+    const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
+
+    const createBattleEmbed = (message) => {
+        return {
+            color: 0x0099FF,
+            title: '⚔️ Combat Pokémon',
+            description: '\u200b',
+            fields: [
+                {
+                    name: `${getTypeEmojis(battleState.playerPokemon)} ${battleState.playerPokemon.name} Nv.${battleState.playerPokemon.level}`,
+                    value: createHPBar(battleState.playerPokemon.currentHp, battleState.playerPokemon.stats.hp),
+                    inline: true
+                },
+                {
+                    name: '\u200b',
+                    value: 'VS',
+                    inline: true
+                },
+                {
+                    name: `${getTypeEmojis(battleState.wildPokemon)} ${battleState.wildPokemon.name} Nv.${battleState.wildPokemon.level}`,
+                    value: createHPBar(battleState.wildPokemon.currentHp, battleState.wildPokemon.stats.hp),
+                    inline: true
+                },
+                {
+                    name: 'Déroulement du combat',
+                    value: message,
+                    inline: false
+                }
+            ],
+            image: {
+                url: 'attachment://battle.png'
+            }
+        };
+    };
+
+    // Modifiez les reply pour utiliser le nouvel embed
     if (firstAttacker.opponent.currentHp === 0) {
         delete battleStates[interaction.user.id];
         const defeatMessage = firstAttacker.isPlayer ? 
             `\nLe ${firstAttacker.opponent.name} sauvage est K.O. !` : 
             `\nTon ${firstAttacker.opponent.name} est K.O. !`;
         
-        const playerMaxHP = firstAttacker.isPlayer ? 
-            firstAttacker.pokemon.stats.hp : 
-            firstAttacker.opponent.stats.hp;
-        const wildMaxHP = firstAttacker.isPlayer ? 
-            firstAttacker.opponent.stats.hp : 
-            firstAttacker.pokemon.stats.hp;
-
-        const battleStatus = `
-🔵 **${battleState.playerPokemon.name}** Nv.${battleState.playerPokemon.level}
-${createHPBar(battleState.playerPokemon.currentHp, playerMaxHP)}
-${POKEMON_SPRITE_URL}${getPokemonId(battleState.playerPokemon.name)}.png
-
-⭕ **${battleState.wildPokemon.name}** Nv.${battleState.wildPokemon.level}
-${createHPBar(battleState.wildPokemon.currentHp, wildMaxHP)}
-${POKEMON_SPRITE_URL}${getPokemonId(battleState.wildPokemon.name)}.png
-
-${battleMessage}`;
-
         interaction.reply({
-            content: battleStatus + defeatMessage,
+            embeds: [createBattleEmbed(battleMessage + defeatMessage)],
+            files: [attachment],
             components: [createExploreButton()]
         });
         return;
@@ -596,26 +621,9 @@ ${battleMessage}`;
             `\nLe ${secondAttacker.opponent.name} sauvage est K.O. !` : 
             `\nTon ${secondAttacker.opponent.name} est K.O. !`;
         
-        const playerMaxHP = secondAttacker.isPlayer ? 
-            secondAttacker.pokemon.stats.hp : 
-            secondAttacker.opponent.stats.hp;
-        const wildMaxHP = secondAttacker.isPlayer ? 
-            secondAttacker.opponent.stats.hp : 
-            secondAttacker.pokemon.stats.hp;
-
-        const battleStatus = `
-🔵 **${battleState.playerPokemon.name}** Nv.${battleState.playerPokemon.level}
-${createHPBar(battleState.playerPokemon.currentHp, playerMaxHP)}
-${POKEMON_SPRITE_URL}${getPokemonId(battleState.playerPokemon.name)}.png
-
-⭕ **${battleState.wildPokemon.name}** Nv.${battleState.wildPokemon.level}
-${createHPBar(battleState.wildPokemon.currentHp, wildMaxHP)}
-${POKEMON_SPRITE_URL}${getPokemonId(battleState.wildPokemon.name)}.png
-
-${battleMessage}`;
-
         interaction.reply({
-            content: battleStatus + defeatMessage,
+            embeds: [createBattleEmbed(battleMessage + defeatMessage)],
+            files: [attachment],
             components: [createExploreButton()]
         });
         return;
@@ -632,26 +640,10 @@ ${battleMessage}`;
         );
     });
 
-    const playerMaxHP = firstAttacker.isPlayer ? 
-        firstAttacker.pokemon.stats.hp : 
-        firstAttacker.opponent.stats.hp;
-    const wildMaxHP = firstAttacker.isPlayer ? 
-        firstAttacker.opponent.stats.hp : 
-        firstAttacker.pokemon.stats.hp;
-
-    const battleStatus = `
-🔵 **${battleState.playerPokemon.name}** Nv.${battleState.playerPokemon.level}
-${createHPBar(battleState.playerPokemon.currentHp, playerMaxHP)}
-${POKEMON_SPRITE_URL}${getPokemonId(battleState.playerPokemon.name)}.png
-
-⭕ **${battleState.wildPokemon.name}** Nv.${battleState.wildPokemon.level}
-${createHPBar(battleState.wildPokemon.currentHp, wildMaxHP)}
-${POKEMON_SPRITE_URL}${getPokemonId(battleState.wildPokemon.name)}.png
-
-${battleMessage}`;
-
     interaction.reply({
-        content: `${battleStatus}\n\nQue doit faire **${battleState.playerPokemon.name}** ?`,
+        embeds: [createBattleEmbed(battleMessage)],
+        files: [attachment],
+        content: `Que doit faire **${battleState.playerPokemon.name}** ?`,
         components: [row]
     });
 }

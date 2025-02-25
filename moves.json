@@ -1,0 +1,320 @@
+{
+  "charge": {
+    "name": "Charge",
+    "type": "Normal",
+    "category": "Physique",
+    "power": 40,
+    "accuracy": 100,
+    "pp": 35,
+    "effect": null
+  },
+  "griffe": {
+    "name": "Griffe",
+    "type": "Normal",
+    "category": "Physique",
+    "power": 40,
+    "accuracy": 100,
+    "pp": 35,
+    "effect": null
+  },
+  "flammeche": {
+    "name": "Flammèche",
+    "type": "Feu",
+    "category": "Spécial",
+    "power": 40,
+    "accuracy": 100,
+    "pp": 25,
+    "effect": {
+      "type": "burn",
+      "chance": 10
+    }
+  },
+  "pistolet-a-o": {
+    "name": "Pistolet à O",
+    "type": "Eau",
+    "category": "Spécial",
+    "power": 40,
+    "accuracy": 100,
+    "pp": 25,
+    "effect": null
+  },
+  "fouet-lianes": {
+    "name": "Fouet Lianes",
+    "type": "Plante",
+    "category": "Physique",
+    "power": 45,
+    "accuracy": 100,
+    "pp": 25,
+    "effect": null
+  },
+  "eclair": {
+    "name": "Éclair",
+    "type": "Électrique",
+    "category": "Spécial",
+    "power": 40,
+    "accuracy": 100,
+    "pp": 30,
+    "effect": {
+      "type": "paralysis",
+      "chance": 10
+    }
+  },
+  "lance-flammes": {
+    "name": "Lance-Flammes",
+    "type": "Feu",
+    "category": "Spécial",
+    "power": 90,
+    "accuracy": 100,
+    "pp": 15,
+    "effect": {
+      "type": "burn",
+      "chance": 10
+    }
+  },
+  "hydrocanon": {
+    "name": "Hydrocanon",
+    "type": "Eau",
+    "category": "Spécial",
+    "power": 110,
+    "accuracy": 80,
+    "pp": 5,
+    "effect": null
+  },
+  "ultralaser": {
+    "name": "Ultralaser",
+    "type": "Normal",
+    "category": "Spécial",
+    "power": 150,
+    "accuracy": 90,
+    "pp": 5,
+    "effect": {
+      "type": "recharge",
+      "chance": 100
+    }
+  },
+  "poudre-dodo": {
+    "name": "Poudre Dodo",
+    "type": "Plante",
+    "category": "Statut",
+    "power": 0,
+    "accuracy": 75,
+    "pp": 15,
+    "effect": {
+      "type": "sleep",
+      "chance": 100
+    }
+  },
+  "hypnose": {
+    "name": "Hypnose",
+    "type": "Psy",
+    "category": "Statut",
+    "power": 0,
+    "accuracy": 60,
+    "pp": 20,
+    "effect": {
+      "type": "sleep",
+      "chance": 100
+    }
+  },
+  "cage-eclair": {
+    "name": "Cage-Éclair",
+    "type": "Électrique",
+    "category": "Statut",
+    "power": 0,
+    "accuracy": 90,
+    "pp": 20,
+    "effect": {
+      "type": "paralysis",
+      "chance": 100
+    }
+  },
+  "fatal-foudre": {
+    "name": "Fatal-Foudre",
+    "type": "Électrique",
+    "category": "Spécial",
+    "power": 110,
+    "accuracy": 70,
+    "pp": 10,
+    "effect": {
+      "type": "paralysis",
+      "chance": 30
+    }
+  },
+  "seisme": {
+    "name": "Séisme",
+    "type": "Sol",
+    "category": "Physique",
+    "power": 100,
+    "accuracy": 100,
+    "pp": 10,
+    "effect": null
+  },
+  "psyko": {
+    "name": "Psyko",
+    "type": "Psy",
+    "category": "Spécial",
+    "power": 90,
+    "accuracy": 100,
+    "pp": 10,
+    "effect": {
+      "type": "spDefDown",
+      "chance": 10
+    }
+  },
+  "laser-glace": {
+    "name": "Laser Glace",
+    "type": "Glace",
+    "category": "Spécial",
+    "power": 90,
+    "accuracy": 100,
+    "pp": 10,
+    "effect": {
+      "type": "freeze",
+      "chance": 10
+    }
+  },
+  "blizzard": {
+    "name": "Blizzard",
+    "type": "Glace",
+    "category": "Spécial",
+    "power": 110,
+    "accuracy": 70,
+    "pp": 5,
+    "effect": {
+      "type": "freeze",
+      "chance": 10
+    }
+  },
+  "deflagration": {
+    "name": "Déflagration",
+    "type": "Feu",
+    "category": "Spécial",
+    "power": 110,
+    "accuracy": 85,
+    "pp": 5,
+    "effect": {
+      "type": "burn",
+      "chance": 10
+    }
+  },
+  "surf": {
+    "name": "Surf",
+    "type": "Eau",
+    "category": "Spécial",
+    "power": 90,
+    "accuracy": 100,
+    "pp": 15,
+    "effect": null
+  },
+  "tranch-herbe": {
+    "name": "Tranch'Herbe",
+    "type": "Plante",
+    "category": "Physique",
+    "power": 55,
+    "accuracy": 95,
+    "pp": 25,
+    "effect": {
+      "type": "criticalHigh",
+      "chance": 100
+    }
+  },
+  "poing-de-feu": {
+    "name": "Poing de Feu",
+    "type": "Feu",
+    "category": "Physique",
+    "power": 75,
+    "accuracy": 100,
+    "pp": 15,
+    "effect": {
+      "type": "burn",
+      "chance": 10
+    }
+  },
+  "poing-glace": {
+    "name": "Poing Glace",
+    "type": "Glace",
+    "category": "Physique",
+    "power": 75,
+    "accuracy": 100,
+    "pp": 15,
+    "effect": {
+      "type": "freeze",
+      "chance": 10
+    }
+  },
+  "poing-eclair": {
+    "name": "Poing Éclair",
+    "type": "Électrique",
+    "category": "Physique",
+    "power": 75,
+    "accuracy": 100,
+    "pp": 15,
+    "effect": {
+      "type": "paralysis",
+      "chance": 10
+    }
+  },
+  "secretion": {
+    "name": "Sécrétion",
+    "type": "Insecte",
+    "category": "Statut",
+    "power": 0,
+    "accuracy": 95,
+    "pp": 40,
+    "effect": {
+      "type": "speedDown",
+      "chance": 100
+    }
+  },
+  "piqure": {
+    "name": "Piqûre",
+    "type": "Insecte",
+    "category": "Physique",
+    "power": 60,
+    "accuracy": 100,
+    "pp": 20,
+    "effect": null
+  },
+  "jet-de-sable": {
+    "name": "Jet de Sable",
+    "type": "Sol",
+    "category": "Statut",
+    "power": 0,
+    "accuracy": 100,
+    "pp": 15,
+    "effect": {
+      "type": "accuracyDown",
+      "chance": 100
+    }
+  },
+  "tornade": {
+    "name": "Tornade",
+    "type": "Vol",
+    "category": "Spécial",
+    "power": 40,
+    "accuracy": 100,
+    "pp": 35,
+    "effect": null
+  },
+  "vive-attaque": {
+    "name": "Vive-Attaque",
+    "type": "Normal",
+    "category": "Physique",
+    "power": 40,
+    "accuracy": 100,
+    "pp": 30,
+    "effect": {
+      "type": "priority",
+      "chance": 100
+    }
+  },
+  "croc-fatal": {
+    "name": "Croc Fatal",
+    "type": "Normal",
+    "category": "Physique",
+    "power": 60,
+    "accuracy": 90,
+    "pp": 25,
+    "effect": null
+  }
+} 

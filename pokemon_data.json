@@ -1,23 +1,176 @@
 {
-    "1": { "name": "Bulbizarre", "types": ["Plante", "Poison"], "evolves": "Herbizarre" },
+    "1": {
+      "name": "Bulbizarre",
+      "types": ["Plante", "Poison"],
+      "evolves": "Herbizarre",
+      "baseStats": {
+        "hp": 45,
+        "attack": 49,
+        "defense": 49,
+        "spAttack": 65,
+        "spDefense": 65,
+        "speed": 45
+      },
+      "catchRate": 45,
+      "expYield": 64,
+      "growthRate": "medium-slow",
+      "learnset": {
+        "1": ["charge", "griffe"],
+        "3": ["fouet-lianes"],
+        "7": ["poudre-dodo"],
+        "13": ["tranch-herbe"],
+        "20": ["poudre-toxik"],
+        "27": ["bombe-beurk"],
+        "34": ["croissance"],
+        "41": ["synthese"],
+        "48": ["lance-soleil"]
+      }
+    },
     "2": { "name": "Herbizarre", "types": ["Plante", "Poison"], "evolves": "Florizarre" },
     "3": { "name": "Florizarre", "types": ["Plante", "Poison"], "evolves": null },
-    "4": { "name": "Salamèche", "types": ["Feu"], "evolves": "Reptincel" },
+    "4": {
+      "name": "Salamèche",
+      "types": ["Feu"],
+      "evolves": "Reptincel",
+      "baseStats": {
+        "hp": 39,
+        "attack": 52,
+        "defense": 43,
+        "spAttack": 60,
+        "spDefense": 50,
+        "speed": 65
+      },
+      "catchRate": 45,
+      "expYield": 62,
+      "growthRate": "medium-slow",
+      "learnset": {
+        "1": ["griffe", "flammeche"],
+        "7": ["brouillard"],
+        "13": ["draco-rage"],
+        "19": ["griffe-acier"],
+        "25": ["lance-flammes"],
+        "31": ["tranche"],
+        "37": ["danse-lames"],
+        "43": ["deflagration"]
+      }
+    },
     "5": { "name": "Reptincel", "types": ["Feu"], "evolves": "Dracaufeu" },
     "6": { "name": "Dracaufeu", "types": ["Feu", "Vol"], "evolves": null },
-    "7": { "name": "Carapuce", "types": ["Eau"], "evolves": "Carabaffe" },
+    "7": {
+      "name": "Carapuce",
+      "types": ["Eau"],
+      "evolves": "Carabaffe",
+      "baseStats": {
+        "hp": 44,
+        "attack": 48,
+        "defense": 65,
+        "spAttack": 50,
+        "spDefense": 64,
+        "speed": 43
+      },
+      "catchRate": 45,
+      "expYield": 63,
+      "growthRate": "medium-slow",
+      "learnset": {
+        "1": ["charge", "pistolet-a-o"],
+        "4": ["mimi-queue"],
+        "7": ["ecume"],
+        "10": ["abri"],
+        "13": ["bulle-d-o"],
+        "18": ["morsure"],
+        "23": ["surf"],
+        "28": ["hydrocanon"],
+        "33": ["danse-pluie"],
+        "40": ["hydro-queue"]
+      }
+    },
     "8": { "name": "Carabaffe", "types": ["Eau"], "evolves": "Tortank" },
     "9": { "name": "Tortank", "types": ["Eau"], "evolves": null },
-    "10": { "name": "Chenipan", "types": ["Insecte"], "evolves": "Chrysacier" },
+    "10": {
+      "name": "Chenipan",
+      "types": ["Insecte"],
+      "evolves": "Chrysacier",
+      "baseStats": {
+        "hp": 45,
+        "attack": 30,
+        "defense": 35,
+        "spAttack": 20,
+        "spDefense": 20,
+        "speed": 45
+      },
+      "catchRate": 255,
+      "expYield": 39,
+      "growthRate": "medium-fast",
+      "learnset": {
+        "1": ["charge", "secretion"],
+        "5": ["piqure"],
+        "9": ["sécrétion"]
+      }
+    },
     "11": { "name": "Chrysacier", "types": ["Insecte"], "evolves": "Papilusion" },
     "12": { "name": "Papilusion", "types": ["Insecte", "Vol"], "evolves": null },
     "13": { "name": "Aspicot", "types": ["Insecte", "Poison"], "evolves": null },
     "14": { "name": "Coconfort", "types": ["Insecte", "Poison"], "evolves": null },
     "15": { "name": "Dardargnan", "types": ["Insecte", "Poison"], "evolves": null },
-    "16": { "name": "Roucool", "types": ["Normal", "Vol"], "evolves": null },
+    "16": {
+      "name": "Roucool",
+      "types": ["Normal", "Vol"],
+      "evolves": "Roucoups",
+      "baseStats": {
+        "hp": 40,
+        "attack": 45,
+        "defense": 40,
+        "spAttack": 35,
+        "spDefense": 35,
+        "speed": 56
+      },
+      "catchRate": 255,
+      "expYield": 50,
+      "growthRate": "medium-slow",
+      "learnset": {
+        "1": ["charge", "griffe"],
+        "5": ["jet-de-sable"],
+        "9": ["tornade"],
+        "13": ["vive-attaque"],
+        "17": ["cyclone"],
+        "21": ["aeropique"],
+        "25": ["danse-plumes"],
+        "29": ["hate"],
+        "33": ["cru-aile"],
+        "37": ["ouragan"]
+      }
+    },
     "17": { "name": "Roucoups", "types": ["Normal", "Vol"], "evolves": null },
     "18": { "name": "Roucarnage", "types": ["Normal", "Vol"], "evolves": null },
-    "19": { "name": "Rattata", "types": ["Normal"], "evolves": null },
+    "19": {
+      "name": "Rattata",
+      "types": ["Normal"],
+      "evolves": "Rattatac",
+      "baseStats": {
+        "hp": 30,
+        "attack": 56,
+        "defense": 35,
+        "spAttack": 25,
+        "spDefense": 35,
+        "speed": 72
+      },
+      "catchRate": 255,
+      "expYield": 51,
+      "growthRate": "medium-fast",
+      "learnset": {
+        "1": ["charge", "griffe"],
+        "4": ["mimi-queue"],
+        "7": ["vive-attaque"],
+        "10": ["croc-fatal"],
+        "13": ["hyper-croc"],
+        "16": ["poursuite"],
+        "19": ["machouille"],
+        "22": ["hate"],
+        "25": ["super-croc"],
+        "28": ["effort"],
+        "31": ["damocles"]
+      }
+    },
     "20": { "name": "Rattatac", "types": ["Normal"], "evolves": null },
     "21": { "name": "Piafabec", "types": ["Normal", "Vol"], "evolves": null },
     "22": { "name": "Rapasdepic", "types": ["Normal", "Vol"], "evolves": null },

@@ -1,5 +1,12 @@
 require('dotenv').config();
+
 const pkmnList = require('./pokemon_data.json');
+const typeChart = require('./type_chart.json');
+const movesList = require('./moves.json');
+
+// Ajoutez ces constantes au début du fichier
+const POKEMON_SPRITE_URL = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/";
+const HP_BAR_LENGTH = 10; // Longueur de la barre de vie en caractères
 
 // Fonction pour récupérer un Pokémon par son nom depuis pkmnList
 function getPokemonByName(name) {
@@ -97,15 +104,15 @@ function handleStartCommand(message) {
 }
 
 // Fonction pour gérer la commande /explore
-function handleExploreCommand(message) {
-    if (!players[message.author.id]) {
-        message.reply("Utilise d'abord pkmn start pour commencer ton aventure !");
+function handleExploreCommand(interaction) {
+    if (!players[interaction.user.id]) {
+        interaction.reply({ content: "Utilise d'abord pkmn start pour commencer ton aventure !", ephemeral: true });
         return;
     }
 
-    const currentLocation = players[message.author.id].location;
+    const currentLocation = players[interaction.user.id].location;
     if (!locations[currentLocation]) {
-        message.reply("La localisation actuelle est invalide. Veuillez redémarrer l'aventure.");
+        interaction.reply({ content: "La localisation actuelle est invalide. Veuillez redémarrer l'aventure.", ephemeral: true });
         return;
     }
     const availableRoutes = locations[currentLocation].routes;
@@ -129,7 +136,10 @@ function handleExploreCommand(message) {
         );
     });
 
-    message.reply({ content: `Où veux-tu aller depuis **${currentLocation}** ou quelle action veux-tu entreprendre ?`, components: [row] });
+    interaction.reply({ 
+        content: `Où veux-tu aller depuis **${currentLocation}** ou quelle action veux-tu entreprendre ?`, 
+        components: [row] 
+    });
 }
 
 // Fonction pour gérer la commande /status
@@ -143,6 +153,17 @@ function handleStatusCommand(message) {
     }
 }
 
+// Créez une nouvelle fonction pour générer le bouton Explorer
+function createExploreButton() {
+    return new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('explore_location')
+                .setLabel('Explorer')
+                .setStyle(ButtonStyle.Success)
+        );
+}
+
 // Écoute les interactions avec les boutons
 client.on('interactionCreate', interaction => {
     if (!interaction.isButton()) return;
@@ -153,12 +174,17 @@ client.on('interactionCreate', interaction => {
         return;
     }
 
-    if (isStarterByCustomId(interaction.customId)) {
+    if (interaction.customId === 'explore_location') {
+        handleExploreCommand(interaction);
+    } else if (isStarterByCustomId(interaction.customId)) {
         handleStarterSelection(interaction);
     } else if (interaction.customId.startsWith('action_')) {
         handleLocationAction(interaction);
     } else if (interaction.customId.startsWith('battle_')) {
         handleBattle(interaction);
+    } else if (interaction.customId.startsWith('attack_')) {
+        const moveName = interaction.customId.replace('attack_', '').replace(/_/g, ' ');
+        handleAttack(interaction, moveName);
     } else if (interaction.customId === 'flee') {
         handleFlee(interaction);
     } else {
@@ -172,14 +198,26 @@ function handleStarterSelection(interaction) {
     let chosenStarter = starters.find(starter => starter.name.toLowerCase() === interaction.customId.toLowerCase());
 
     if (chosenStarter) {
-        // Ajout des stats de base
+        const level = 5;
+        const stats = calculateStats(chosenStarter, level);
+        
+        // Récupération des attaques de départ depuis le learnset
+        const starterMoves = Object.entries(chosenStarter.learnset)
+            .filter(([reqLevel]) => parseInt(reqLevel) <= level)
+            .flatMap(([, moves]) => moves)
+            .slice(0, 4); // Maximum 4 attaques
+
         chosenStarter = {
             ...chosenStarter,
-            level: 5,
+            level: level,
             exp: 0,
             maxExp: 100,
-            hp: 20,
-            maxHp: 20
+            stats: stats,
+            currentHp: stats.hp,
+            moves: starterMoves.map(moveId => ({
+                ...movesList[moveId],
+                currentPP: movesList[moveId].pp
+            }))
         };
         
         players[userId] = { 
@@ -187,7 +225,14 @@ function handleStarterSelection(interaction) {
             pokemons: [chosenStarter]
         };
         
-        interaction.reply(`${interaction.user.username}, tu as choisi **${chosenStarter.name}** niveau ${chosenStarter.level} comme starter ! Utilise ${PREFIX} explore pour commencer ton aventure.`);
+        interaction.reply({
+            content: 
+                `${interaction.user.username}, tu as choisi **${chosenStarter.name}** niveau ${level} comme starter !\n` +
+                `Stats: PV ${stats.hp}, Attaque ${stats.attack}, Défense ${stats.defense}, ` +
+                `Attaque Spé ${stats.spAttack}, Défense Spé ${stats.spDefense}, Vitesse ${stats.speed}\n` +
+                `Attaques: ${chosenStarter.moves.map(move => move.name).join(", ")}`,
+            components: [createExploreButton()]
+        });
     }
 }
 
@@ -204,7 +249,10 @@ function handleLocationExploration(interaction) {
     if (availableRoutes.includes(interaction.customId)) {
         players[userId].location = interaction.customId;
         const description = locations[interaction.customId].description;
-        interaction.reply(`Tu es maintenant à **${interaction.customId}**. ${description}`);
+        interaction.reply({
+            content: `Tu es maintenant à **${interaction.customId}**. ${description}`,
+            components: [createExploreButton()]
+        });
     } else {
         interaction.reply({ content: "Ce chemin n'est pas disponible.", ephemeral: true });
     }
@@ -220,10 +268,13 @@ function handleLocationAction(interaction) {
     }
     const action = interaction.customId.replace('action_', '').replace(/_/g, ' ');
 
-    if (action === 'chercher des Pokémon sauvages') {
+    if (action === 'chercher des pokémon sauvages') {
         handleWildPokemonSearch(interaction, currentLocation);
     } else {
-        interaction.reply(`${interaction.user.username}, tu as choisi de **${action}** à **${currentLocation}**.`);
+        interaction.reply({
+            content: `${interaction.user.username}, tu as choisi de **${action}** à **${currentLocation}**.`,
+            components: [createExploreButton()]
+        });
     }
 }
 
@@ -236,6 +287,33 @@ function handleWildPokemonSearch(interaction, currentLocation) {
     }
     
     const foundPokemon = wildPokemons[Math.floor(Math.random() * wildPokemons.length)];
+    const wildPokemonLevel = 5;
+    const wildPokemonStats = calculateStats(foundPokemon, wildPokemonLevel);
+
+    // Récupération des attaques disponibles pour le niveau du Pokémon
+    const availableMoves = [];
+    Object.entries(foundPokemon.learnset).forEach(([level, moves]) => {
+        if (parseInt(level) <= wildPokemonLevel) {
+            moves.forEach(moveId => {
+                const move = movesList[moveId];
+                if (move) {
+                    availableMoves.push({
+                        ...move,
+                        currentPP: move.pp
+                    });
+                }
+            });
+        }
+    });
+
+    const wildPokemonInstance = {
+        ...foundPokemon,
+        level: wildPokemonLevel,
+        stats: wildPokemonStats,
+        currentHp: wildPokemonStats.hp,
+        moves: availableMoves
+    };
+
     const row = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
@@ -249,16 +327,43 @@ function handleWildPokemonSearch(interaction, currentLocation) {
         );
 
     battleStates[interaction.user.id] = {
-        wildPokemon: foundPokemon,
+        wildPokemon: wildPokemonInstance,
         playerPokemon: players[interaction.user.id].pokemons[0]
     };
 
     interaction.reply({ 
-        content: `${interaction.user.username}, tu as trouvé un **${foundPokemon.name}** sauvage ! Que souhaites-tu faire ?`,
+        content: `${interaction.user.username}, tu as trouvé un **${foundPokemon.name}** sauvage niveau ${wildPokemonLevel} ! Que souhaites-tu faire ?`,
         components: [row]
     });
 }
 
+function calculateDamageMultiplier(attackType, defenderTypes) {
+    let multiplier = 1;
+    defenderTypes.forEach(defenderType => {
+        multiplier *= typeChart[attackType][defenderType];
+    });
+    return multiplier;
+}
+
+// Ajoutez cette fonction utilitaire pour créer la barre de vie
+function createHPBar(currentHP, maxHP) {
+    const percentage = currentHP / maxHP;
+    const filledBars = Math.round(HP_BAR_LENGTH * percentage);
+    const emptyBars = HP_BAR_LENGTH - filledBars;
+    
+    const filledSection = "█".repeat(filledBars);
+    const emptySection = "░".repeat(emptyBars);
+    
+    // Change la couleur en fonction du pourcentage de vie
+    let color;
+    if (percentage > 0.5) color = "🟩"; // Vert
+    else if (percentage > 0.2) color = "🟨"; // Jaune
+    else color = "🟥"; // Rouge
+    
+    return `${color} ${filledSection}${emptySection} ${Math.ceil(currentHP)}/${maxHP}`;
+}
+
+// Modifiez la fonction handleBattle
 function handleBattle(interaction) {
     const battleState = battleStates[interaction.user.id];
     if (!battleState) {
@@ -266,15 +371,243 @@ function handleBattle(interaction) {
         return;
     }
 
-    const damage = Math.floor(Math.random() * 20) + 10;
-    interaction.reply(
-        `**${battleState.playerPokemon.name}** attaque **${battleState.wildPokemon.name}** et inflige ${damage} points de dégâts !`
+    const playerPokemon = battleState.playerPokemon;
+    const wildPokemon = battleState.wildPokemon;
+
+    const playerMaxHP = playerPokemon.stats.hp;
+    const wildMaxHP = wildPokemon.stats.hp;
+
+    const battleStatus = `
+🔵 **${playerPokemon.name}** Nv.${playerPokemon.level}
+${createHPBar(playerPokemon.currentHp, playerMaxHP)}
+${POKEMON_SPRITE_URL}${getPokemonId(playerPokemon.name)}.png
+
+⭕ **${wildPokemon.name}** Nv.${wildPokemon.level}
+${createHPBar(wildPokemon.currentHp, wildMaxHP)}
+${POKEMON_SPRITE_URL}${getPokemonId(wildPokemon.name)}.png
+`;
+
+    const row = new ActionRowBuilder();
+    battleState.playerPokemon.moves.forEach(move => {
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`attack_${move.name.toLowerCase().replace(/\s+/g, '_')}`)
+                .setLabel(`${move.name} (${move.currentPP}/${move.pp})`)
+                .setStyle(ButtonStyle.Primary)
+        );
+    });
+
+    interaction.reply({
+        content: `${battleStatus}\nQue doit faire **${battleState.playerPokemon.name}** ?`,
+        components: [row]
+    });
+}
+
+// Modifiez également handleAttack pour inclure les barres de vie
+function handleAttack(interaction, moveName) {
+    const battleState = battleStates[interaction.user.id];
+    if (!battleState) {
+        interaction.reply({ content: "Aucun combat en cours.", ephemeral: true });
+        return;
+    }
+
+    const playerMove = battleState.playerPokemon.moves.find(m => m.name.toLowerCase() === moveName.toLowerCase());
+    if (!playerMove || playerMove.currentPP <= 0) {
+        interaction.reply({ content: "Cette attaque ne peut pas être utilisée !", ephemeral: true });
+        return;
+    }
+
+    // Sélection de l'attaque du Pokémon sauvage
+    const wildMoves = battleState.wildPokemon.moves;
+    const wildMove = wildMoves[Math.floor(Math.random() * wildMoves.length)];
+
+    let battleMessage = "";
+    const playerSpeed = battleState.playerPokemon.stats.speed;
+    const wildSpeed = battleState.wildPokemon.stats.speed;
+
+    // Détermine qui attaque en premier en fonction de la vitesse
+    const firstAttacker = playerSpeed >= wildSpeed ? 
+        { pokemon: battleState.playerPokemon, opponent: battleState.wildPokemon, move: playerMove, isPlayer: true } : 
+        { pokemon: battleState.wildPokemon, opponent: battleState.playerPokemon, move: wildMove, isPlayer: false };
+    
+    const secondAttacker = firstAttacker.isPlayer ? 
+        { pokemon: battleState.wildPokemon, opponent: battleState.playerPokemon, move: wildMove, isPlayer: false } : 
+        { pokemon: battleState.playerPokemon, opponent: battleState.wildPokemon, move: playerMove, isPlayer: true };
+
+    // Première attaque
+    if (firstAttacker.isPlayer) playerMove.currentPP--;
+    const firstDamage = calculateDamage(firstAttacker.pokemon, firstAttacker.opponent, firstAttacker.move);
+    firstAttacker.opponent.currentHp = Math.max(0, firstAttacker.opponent.currentHp - firstDamage);
+    
+    battleMessage += `**${firstAttacker.pokemon.name}** utilise ${firstAttacker.move.name} et inflige ${firstDamage} dégâts à **${firstAttacker.opponent.name}** !`;
+
+    // Vérifie si le combat est terminé après la première attaque
+    if (firstAttacker.opponent.currentHp === 0) {
+        delete battleStates[interaction.user.id];
+        const defeatMessage = firstAttacker.isPlayer ? 
+            `\nLe ${firstAttacker.opponent.name} sauvage est K.O. !` : 
+            `\nTon ${firstAttacker.opponent.name} est K.O. !`;
+        
+        const playerMaxHP = firstAttacker.isPlayer ? 
+            firstAttacker.pokemon.stats.hp : 
+            firstAttacker.opponent.stats.hp;
+        const wildMaxHP = firstAttacker.isPlayer ? 
+            firstAttacker.opponent.stats.hp : 
+            firstAttacker.pokemon.stats.hp;
+
+        const battleStatus = `
+🔵 **${battleState.playerPokemon.name}** Nv.${battleState.playerPokemon.level}
+${createHPBar(battleState.playerPokemon.currentHp, playerMaxHP)}
+${POKEMON_SPRITE_URL}${getPokemonId(battleState.playerPokemon.name)}.png
+
+⭕ **${battleState.wildPokemon.name}** Nv.${battleState.wildPokemon.level}
+${createHPBar(battleState.wildPokemon.currentHp, wildMaxHP)}
+${POKEMON_SPRITE_URL}${getPokemonId(battleState.wildPokemon.name)}.png
+
+${battleMessage}`;
+
+        interaction.reply({
+            content: battleStatus + defeatMessage,
+            components: [createExploreButton()]
+        });
+        return;
+    }
+
+    // Deuxième attaque
+    if (secondAttacker.isPlayer) playerMove.currentPP--;
+    const secondDamage = calculateDamage(secondAttacker.pokemon, secondAttacker.opponent, secondAttacker.move);
+    secondAttacker.opponent.currentHp = Math.max(0, secondAttacker.opponent.currentHp - secondDamage);
+    
+    battleMessage += `\n**${secondAttacker.pokemon.name}** utilise ${secondAttacker.move.name} et inflige ${secondDamage} dégâts à **${secondAttacker.opponent.name}** !`;
+
+    // Vérifie si le combat est terminé après la seconde attaque
+    if (secondAttacker.opponent.currentHp === 0) {
+        delete battleStates[interaction.user.id];
+        const defeatMessage = secondAttacker.isPlayer ? 
+            `\nLe ${secondAttacker.opponent.name} sauvage est K.O. !` : 
+            `\nTon ${secondAttacker.opponent.name} est K.O. !`;
+        
+        const playerMaxHP = secondAttacker.isPlayer ? 
+            secondAttacker.pokemon.stats.hp : 
+            secondAttacker.opponent.stats.hp;
+        const wildMaxHP = secondAttacker.isPlayer ? 
+            secondAttacker.opponent.stats.hp : 
+            secondAttacker.pokemon.stats.hp;
+
+        const battleStatus = `
+🔵 **${battleState.playerPokemon.name}** Nv.${battleState.playerPokemon.level}
+${createHPBar(battleState.playerPokemon.currentHp, playerMaxHP)}
+${POKEMON_SPRITE_URL}${getPokemonId(battleState.playerPokemon.name)}.png
+
+⭕ **${battleState.wildPokemon.name}** Nv.${battleState.wildPokemon.level}
+${createHPBar(battleState.wildPokemon.currentHp, wildMaxHP)}
+${POKEMON_SPRITE_URL}${getPokemonId(battleState.wildPokemon.name)}.png
+
+${battleMessage}`;
+
+        interaction.reply({
+            content: battleStatus + defeatMessage,
+            components: [createExploreButton()]
+        });
+        return;
+    }
+
+    // Le combat continue
+    const row = new ActionRowBuilder();
+    battleState.playerPokemon.moves.forEach(move => {
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`attack_${move.name.toLowerCase().replace(/\s+/g, '_')}`)
+                .setLabel(`${move.name} (${move.currentPP}/${move.pp})`)
+                .setStyle(ButtonStyle.Primary)
+        );
+    });
+
+    const playerMaxHP = firstAttacker.isPlayer ? 
+        firstAttacker.pokemon.stats.hp : 
+        firstAttacker.opponent.stats.hp;
+    const wildMaxHP = firstAttacker.isPlayer ? 
+        firstAttacker.opponent.stats.hp : 
+        firstAttacker.pokemon.stats.hp;
+
+    const battleStatus = `
+🔵 **${battleState.playerPokemon.name}** Nv.${battleState.playerPokemon.level}
+${createHPBar(battleState.playerPokemon.currentHp, playerMaxHP)}
+${POKEMON_SPRITE_URL}${getPokemonId(battleState.playerPokemon.name)}.png
+
+⭕ **${battleState.wildPokemon.name}** Nv.${battleState.wildPokemon.level}
+${createHPBar(battleState.wildPokemon.currentHp, wildMaxHP)}
+${POKEMON_SPRITE_URL}${getPokemonId(battleState.wildPokemon.name)}.png
+
+${battleMessage}`;
+
+    interaction.reply({
+        content: `${battleStatus}\n\nQue doit faire **${battleState.playerPokemon.name}** ?`,
+        components: [row]
+    });
+}
+
+// Fonction utilitaire pour calculer les dégâts
+function calculateDamage(attacker, defender, move) {
+    if (move.category === "Statut") return 0;
+    
+    const attackStat = move.category === "Physique" ? attacker.stats.attack : attacker.stats.spAttack;
+    const defenseStat = move.category === "Physique" ? defender.stats.defense : defender.stats.spDefense;
+    const typeMultiplier = calculateDamageMultiplier(move.type, defender.types);
+    
+    // Formule de dégâts Pokémon
+    const baseDamage = Math.floor(
+        ((2 * attacker.level / 5 + 2) * move.power * attackStat / defenseStat / 50 + 2) * 
+        typeMultiplier * 
+        (Math.random() * (1 - 0.85) + 0.85)
     );
+
+    return baseDamage;
+}
+
+function getStatusMessage(effectType) {
+    switch(effectType) {
+        case "burn": return "brûlé";
+        case "freeze": return "gelé";
+        case "paralysis": return "paralysé";
+        case "sleep": return "endormi";
+        case "poison": return "empoisonné";
+        default: return "";
+    }
 }
 
 function handleFlee(interaction) {
     delete battleStates[interaction.user.id];
-    interaction.reply("Tu as fui le combat !");
+    interaction.reply({
+        content: "Tu as fui le combat !",
+        components: [createExploreButton()]
+    });
+}
+
+// Ajoutez cette fonction après les autres fonctions utilitaires
+function calculateStats(pokemon, level) {
+    const stats = {};
+    
+    // Calcul des PV
+    stats.hp = Math.floor(((2 * pokemon.baseStats.hp + 31 + Math.floor(252/4)) * level) / 100 + level + 10);
+    
+    // Calcul des autres stats
+    const otherStats = ['attack', 'defense', 'spAttack', 'spDefense', 'speed'];
+    otherStats.forEach(stat => {
+        stats[stat] = Math.floor(((2 * pokemon.baseStats[stat] + 31 + Math.floor(252/4)) * level) / 100 + 5);
+    });
+    
+    return stats;
+}
+
+// Ajoutez cette fonction utilitaire pour obtenir l'ID du Pokémon
+function getPokemonId(pokemonName) {
+    for (const [id, pokemon] of Object.entries(pkmnList)) {
+        if (pokemon.name === pokemonName) {
+            return id;
+        }
+    }
+    return "0"; // Sprite par défaut si non trouvé
 }
 
 // Connecter le bot

@@ -393,9 +393,28 @@ function getTypeEmojis(pokemon) {
     return pokemon.types.map(type => TYPE_EMOJIS[type] || "❓").join(" ");
 }
 
-// Ajoutez cette fonction pour créer l'image de combat
-async function createBattleImage(playerPokemonId, wildPokemonId) {
-    const canvas = Canvas.createCanvas(512, 256); // Doublons la taille pour plus d'espace
+// Ajoutez cette fonction pour dessiner une croix rouge sur un Pokémon KO
+function drawKOCross(ctx, x, y, size) {
+    ctx.strokeStyle = '#FF0000';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    
+    // Dessiner la première ligne de la croix (\)
+    ctx.beginPath();
+    ctx.moveTo(x - size/2, y - size/2);
+    ctx.lineTo(x + size/2, y + size/2);
+    ctx.stroke();
+    
+    // Dessiner la deuxième ligne de la croix (/)
+    ctx.beginPath();
+    ctx.moveTo(x + size/2, y - size/2);
+    ctx.lineTo(x - size/2, y + size/2);
+    ctx.stroke();
+}
+
+// Modifiez la fonction createBattleImage pour prendre en compte les KO
+async function createBattleImage(playerPokemonId, wildPokemonId, playerHP = 1, wildHP = 1) {
+    const canvas = Canvas.createCanvas(512, 256);
     const ctx = canvas.getContext('2d');
 
     // Définir un fond noir semi-transparent
@@ -406,11 +425,23 @@ async function createBattleImage(playerPokemonId, wildPokemonId) {
     const playerSprite = await Canvas.loadImage(`${POKEMON_SPRITE_URL}${playerPokemonId}.png`);
     const wildSprite = await Canvas.loadImage(`${POKEMON_SPRITE_URL}${wildPokemonId}.png`);
 
+    // Position des Pokémon
+    const playerX = 64;
+    const wildX = 320;
+    const y = 48;
+    const size = 128;
+
     // Dessiner le Pokémon du joueur à gauche
-    ctx.drawImage(playerSprite, 64, 48, 128, 128);
+    ctx.drawImage(playerSprite, playerX, y, size, size);
+    if (playerHP <= 0) {
+        drawKOCross(ctx, playerX + size/2, y + size/2, size);
+    }
     
     // Dessiner le Pokémon sauvage à droite
-    ctx.drawImage(wildSprite, 320, 48, 128, 128);
+    ctx.drawImage(wildSprite, wildX, y, size, size);
+    if (wildHP <= 0) {
+        drawKOCross(ctx, wildX + size/2, y + size/2, size);
+    }
 
     // Configurer le style du VS
     ctx.font = 'bold 72px Arial';
@@ -424,23 +455,23 @@ async function createBattleImage(playerPokemonId, wildPokemonId) {
     
     // Position du VS
     const x = canvas.width / 2;
-    const y = canvas.height / 2;
+    const y2 = canvas.height / 2;
 
     // Dessiner l'ombre du VS
-    ctx.strokeText('VS', x, y);
+    ctx.strokeText('VS', x, y2);
     
     // Dessiner le VS avec un dégradé
-    const gradient = ctx.createLinearGradient(x - 30, y - 30, x + 30, y + 30);
+    const gradient = ctx.createLinearGradient(x - 30, y2 - 30, x + 30, y2 + 30);
     gradient.addColorStop(0, '#FF4400');
     gradient.addColorStop(0.5, '#FFFF00');
     gradient.addColorStop(1, '#FF4400');
     ctx.fillStyle = gradient;
-    ctx.fillText('VS', x, y);
+    ctx.fillText('VS', x, y2);
 
     // Ajouter un effet de lueur
     ctx.shadowColor = '#FF4400';
     ctx.shadowBlur = 15;
-    ctx.fillText('VS', x, y);
+    ctx.fillText('VS', x, y2);
 
     return canvas.toBuffer();
 }
@@ -462,7 +493,9 @@ async function handleBattle(interaction) {
     // Créer l'image de combat
     const battleImage = await createBattleImage(
         getPokemonId(playerPokemon.name),
-        getPokemonId(wildPokemon.name)
+        getPokemonId(wildPokemon.name),
+        playerPokemon.currentHp,
+        wildPokemon.currentHp
     );
     
     // Créer l'attachment pour Discord
@@ -553,7 +586,9 @@ async function handleAttack(interaction, moveName) {
     // Créer l'image de combat
     const battleImage = await createBattleImage(
         getPokemonId(battleState.playerPokemon.name),
-        getPokemonId(battleState.wildPokemon.name)
+        getPokemonId(battleState.wildPokemon.name),
+        battleState.playerPokemon.currentHp,
+        battleState.wildPokemon.currentHp
     );
     
     // Créer l'attachment pour Discord

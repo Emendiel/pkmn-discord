@@ -13,6 +13,8 @@ import {
   EmbedField,
   ActivityType
 } from 'discord.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
 config();
 
@@ -182,6 +184,12 @@ const client = new Client({
 client.once('ready', () => {
   console.log(`Bot connecté en tant que ${client.user?.tag}!`);
   client.user?.setActivity('Pokémon', { type: ActivityType.Playing });
+  
+  // Charger les données de jeu au démarrage
+  loadGameData();
+  
+  // Configurer une sauvegarde automatique toutes les 5 minutes
+  setInterval(saveGameData, 5 * 60 * 1000);
 });
 
 // Command handler
@@ -201,6 +209,11 @@ client.on('messageCreate', (message: Message) => {
     handleStatusCommand(message);
   } else if (command === 'battle' && args[0] === 'stats') {
     handleBattleStatsCommand(message, args);
+  } else if (command === 'reset') {
+    handleResetGameCommand(message);
+  } else if (command === 'save') {
+    saveGameData();
+    message.reply("🔄 Jeu sauvegardé avec succès !");
   }
 });
 
@@ -316,36 +329,48 @@ function createExploreButton(): ActionRowBuilder<ButtonBuilder> {
 // Écoute les interactions avec les boutons
 client.on('interactionCreate', async (interaction: Interaction) => {
   if (!interaction.isButton()) return;
-
+  
   const buttonId = interaction.customId;
   
-  if (buttonId === 'battle_stats') {
-    await handleBattleStatsInteraction(interaction);
+  // Gérer les boutons de réinitialisation
+  if (buttonId === 'confirm_reset') {
+    await handleConfirmReset(interaction as ButtonInteraction);
+    return;
+  } else if (buttonId === 'cancel_reset') {
+    await interaction.update({ 
+      content: "Réinitialisation annulée. Ta progression est sauvegardée.", 
+      components: [] 
+    });
+    return;
+  } else if (buttonId === 'battle_stats') {
+    await handleBattleStatsInteraction(interaction as ButtonInteraction);
+    return;
   } else if (buttonId === 'return_to_battle') {
     await interaction.reply({ content: "Retour au combat !", ephemeral: true });
-  } else {
-    const userId = interaction.user.id;
-    if (!players[userId]) {
-      interaction.reply({ content: "Utilise d'abord pkmn start pour commencer ton aventure !", ephemeral: true });
-      return;
-    }
+    return;
+  }
+  
+  const userId = interaction.user.id;
+  if (!players[userId]) {
+    interaction.reply({ content: "Utilise d'abord pkmn start pour commencer ton aventure !", ephemeral: true });
+    return;
+  }
 
-    if (buttonId === 'explore_location') {
-      handleExploreCommand(interaction);
-    } else if (isStarterByCustomId(buttonId)) {
-      handleStarterSelection(interaction);
-    } else if (buttonId.startsWith('action_')) {
-      handleLocationAction(interaction);
-    } else if (buttonId.startsWith('battle_')) {
-      handleBattle(interaction);
-    } else if (buttonId.startsWith('attack_')) {
-      const moveName = buttonId.replace('attack_', '').replace(/_/g, ' ');
-      handleAttack(interaction, moveName);
-    } else if (buttonId === 'flee') {
-      handleFlee(interaction);
-    } else {
-      handleLocationExploration(interaction);
-    }
+  if (buttonId === 'explore_location') {
+    handleExploreCommand(interaction);
+  } else if (isStarterByCustomId(buttonId)) {
+    handleStarterSelection(interaction);
+  } else if (buttonId.startsWith('action_')) {
+    handleLocationAction(interaction);
+  } else if (buttonId.startsWith('battle_')) {
+    handleBattle(interaction);
+  } else if (buttonId.startsWith('attack_')) {
+    const moveName = buttonId.replace('attack_', '').replace(/_/g, ' ');
+    handleAttack(interaction, moveName);
+  } else if (buttonId === 'flee') {
+    handleFlee(interaction);
+  } else {
+    handleLocationExploration(interaction);
   }
 });
 
@@ -1538,6 +1563,116 @@ async function handleBattleStatsInteraction(interaction: ButtonInteraction): Pro
   
   await interaction.reply({ embeds: [statsEmbed], components: [row], ephemeral: true });
 }
+
+// Fonction pour gérer la commande de réinitialisation du jeu
+function handleResetGameCommand(message: Message): void {
+  const userId = message.author.id;
+  
+  // Vérifier si le joueur existe
+  if (!players[userId]) {
+    message.reply("Tu n'as pas encore commencé d'aventure. Utilise `pkmn start` pour commencer.");
+    return;
+  }
+  
+  // Créer un bouton de confirmation
+  const row = new ActionRowBuilder<ButtonBuilder>()
+    .addComponents(
+      new ButtonBuilder()
+        .setCustomId('confirm_reset')
+        .setLabel('Confirmer la réinitialisation')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('cancel_reset')
+        .setLabel('Annuler')
+        .setStyle(ButtonStyle.Secondary)
+    );
+  
+  message.reply({
+    content: "⚠️ **ATTENTION** ⚠️\n\nTu es sur le point de **réinitialiser complètement** ton aventure Pokémon. Toute ta progression sera **perdue définitivement**.\n\n• Tous tes Pokémon seront supprimés\n• Ta localisation sera réinitialisée\n• Tout combat en cours sera annulé\n\nEs-tu vraiment sûr de vouloir recommencer à zéro ?",
+    components: [row]
+  });
+}
+
+// Fonction pour gérer la confirmation de réinitialisation
+async function handleConfirmReset(interaction: ButtonInteraction): Promise<void> {
+  const userId = interaction.user.id;
+  
+  // Supprimer les données du joueur
+  delete players[userId];
+  
+  // Supprimer tout état de bataille actif
+  delete battleStates[userId];
+  
+  // Sauvegarder les changements
+  saveGameData();
+  
+  // Envoyer un message de confirmation
+  await interaction.update({
+    content: "🔄 **Réinitialisation terminée !**\n\nTon aventure Pokémon a été complètement réinitialisée. Tu peux commencer une nouvelle aventure en utilisant la commande `pkmn start`.",
+    components: []
+  });
+}
+
+// Fonction pour sauvegarder les données du jeu
+function saveGameData(): void {
+  // Créer l'objet de données à sauvegarder
+  const gameData = {
+    players,
+    // Ne pas sauvegarder les états de bataille car ils contiennent des références circulaires
+    // et nécessitent des objets Canvas qui ne peuvent pas être sérialisés
+  };
+
+  try {
+    // Assurer que le dossier data existe
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+
+    // Sauvegarder les données dans un fichier JSON
+    const savePath = path.join(dataDir, 'game_save.json');
+    fs.writeFileSync(savePath, JSON.stringify(gameData, null, 2), 'utf8');
+    console.log(`Données de jeu sauvegardées dans ${savePath}`);
+  } catch (error) {
+    console.error('Erreur lors de la sauvegarde des données du jeu:', error);
+  }
+}
+
+// Fonction pour charger les données du jeu
+function loadGameData(): void {
+  try {
+    const savePath = path.join(__dirname, 'data', 'game_save.json');
+    
+    // Vérifier si le fichier de sauvegarde existe
+    if (fs.existsSync(savePath)) {
+      const saveData = JSON.parse(fs.readFileSync(savePath, 'utf8'));
+      
+      // Restaurer les données des joueurs
+      if (saveData.players) {
+        Object.assign(players, saveData.players);
+        console.log('Données des joueurs chargées avec succès');
+      }
+      
+      // Les états de bataille ne sont pas restaurés car ils nécessitent des objets Canvas
+      // et contiennent des références circulaires
+    }
+  } catch (error) {
+    console.error('Erreur lors du chargement des données du jeu:', error);
+  }
+}
+
+// Ajouter un gestionnaire pour sauvegarder les données avant la fermeture
+process.on('SIGINT', () => {
+  console.log('Sauvegarde des données avant fermeture...');
+  saveGameData();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('Sauvegarde des données avant fermeture...');
+  saveGameData();
+  process.exit(0);
+});
 
 // Connecter le bot
 client.login(process.env.TOKEN); 

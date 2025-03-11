@@ -10,7 +10,8 @@ import {
   Message,
   ButtonInteraction,
   Interaction,
-  EmbedField
+  EmbedField,
+  ActivityType
 } from 'discord.js';
 
 config();
@@ -21,6 +22,12 @@ const typeChart = require('./data/type_chart.json');
 const movesList = require('./data/moves.json');
 
 // Types pour les structures de données
+
+interface Effect {
+  type: string;
+  chance: number;
+}
+
 interface Move {
   name: string;
   power: number;
@@ -29,7 +36,7 @@ interface Move {
   currentPP?: number;
   type: string;
   category: 'Physique' | 'Spécial' | 'Statut';
-  effect?: string;
+  effect?: Effect;
   effectChance?: number;
 }
 
@@ -70,6 +77,14 @@ interface Location {
 interface BattleState {
   wildPokemon: Pokemon;
   playerPokemon: Pokemon;
+  wildStatus?: {
+    type: string;
+    turns?: number;
+  };
+  playerStatus?: {
+    type: string;
+    turns?: number;
+  };
 }
 
 // Constantes
@@ -163,7 +178,8 @@ const client = new Client({
 });
 
 client.once('ready', () => {
-  console.log(`${client.user?.tag} est prêt à l'action !`);
+  console.log(`Bot connecté en tant que ${client.user?.tag}!`);
+  client.user?.setActivity('Pokémon', { type: ActivityType.Playing });
 });
 
 // Command handler
@@ -181,6 +197,8 @@ client.on('messageCreate', (message: Message) => {
     handleExploreCommand(message);
   } else if (command === 'status') {
     handleStatusCommand(message);
+  } else if (command === 'battle' && args[0] === 'stats') {
+    handleBattleStatsCommand(message, args);
   }
 });
 
@@ -294,30 +312,38 @@ function createExploreButton(): ActionRowBuilder<ButtonBuilder> {
 }
 
 // Écoute les interactions avec les boutons
-client.on('interactionCreate', (interaction: Interaction) => {
+client.on('interactionCreate', async (interaction: Interaction) => {
   if (!interaction.isButton()) return;
 
-  const userId = interaction.user.id;
-  if (!players[userId]) {
-    interaction.reply({ content: "Utilise d'abord pkmn start pour commencer ton aventure !", ephemeral: true });
-    return;
-  }
-
-  if (interaction.customId === 'explore_location') {
-    handleExploreCommand(interaction);
-  } else if (isStarterByCustomId(interaction.customId)) {
-    handleStarterSelection(interaction);
-  } else if (interaction.customId.startsWith('action_')) {
-    handleLocationAction(interaction);
-  } else if (interaction.customId.startsWith('battle_')) {
-    handleBattle(interaction);
-  } else if (interaction.customId.startsWith('attack_')) {
-    const moveName = interaction.customId.replace('attack_', '').replace(/_/g, ' ');
-    handleAttack(interaction, moveName);
-  } else if (interaction.customId === 'flee') {
-    handleFlee(interaction);
+  const buttonId = interaction.customId;
+  
+  if (buttonId === 'battle_stats') {
+    await handleBattleStatsInteraction(interaction);
+  } else if (buttonId === 'return_to_battle') {
+    await interaction.reply({ content: "Retour au combat !", ephemeral: true });
   } else {
-    handleLocationExploration(interaction);
+    const userId = interaction.user.id;
+    if (!players[userId]) {
+      interaction.reply({ content: "Utilise d'abord pkmn start pour commencer ton aventure !", ephemeral: true });
+      return;
+    }
+
+    if (buttonId === 'explore_location') {
+      handleExploreCommand(interaction);
+    } else if (isStarterByCustomId(buttonId)) {
+      handleStarterSelection(interaction);
+    } else if (buttonId.startsWith('action_')) {
+      handleLocationAction(interaction);
+    } else if (buttonId.startsWith('battle_')) {
+      handleBattle(interaction);
+    } else if (buttonId.startsWith('attack_')) {
+      const moveName = buttonId.replace('attack_', '').replace(/_/g, ' ');
+      handleAttack(interaction, moveName);
+    } else if (buttonId === 'flee') {
+      handleFlee(interaction);
+    } else {
+      handleLocationExploration(interaction);
+    }
   }
 });
 
@@ -643,6 +669,22 @@ async function handleBattle(interaction: ButtonInteraction): Promise<void> {
     });
   }
 
+  // Ajouter un bouton pour les statistiques
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId('battle_stats')
+      .setLabel('Statistiques')
+      .setStyle(ButtonStyle.Secondary)
+  );
+  
+  // Ajouter un bouton pour fuir
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId('flee')
+      .setLabel('Fuir')
+      .setStyle(ButtonStyle.Danger)
+  );
+
   interaction.reply({
     embeds: [battleEmbed],
     files: [attachment],
@@ -682,55 +724,67 @@ async function handleAttack(interaction: ButtonInteraction, moveName: string): P
     { pokemon: battleState.wildPokemon, opponent: battleState.playerPokemon, move: wildMove, isPlayer: false } : 
     { pokemon: battleState.playerPokemon, opponent: battleState.wildPokemon, move: playerMove, isPlayer: true };
 
-  // Première attaque
-  if (firstAttacker.isPlayer && playerMove.currentPP) playerMove.currentPP--;
-  const firstDamage = calculateDamage(firstAttacker.pokemon, firstAttacker.opponent, firstAttacker.move);
-  if (firstAttacker.opponent.currentHp !== undefined) {
-    firstAttacker.opponent.currentHp = Math.max(0, firstAttacker.opponent.currentHp - firstDamage);
+  // Vérifier si les Pokémon peuvent attaquer en fonction de leur statut
+  let firstCanAttack = true;
+  let secondCanAttack = true;
+  
+  // Vérifier si le premier attaquant est paralysé (25% de chance de ne pas attaquer)
+  if ((firstAttacker.isPlayer && battleState.playerStatus?.type === "paralysis") ||
+      (!firstAttacker.isPlayer && battleState.wildStatus?.type === "paralysis")) {
+    if (Math.random() < 0.25) {
+      firstCanAttack = false;
+      battleMessage += `**${firstAttacker.pokemon.name}** est paralysé et ne peut pas attaquer !\n`;
+    }
   }
   
-  battleMessage += `**${firstAttacker.pokemon.name}** utilise ${firstAttacker.move.name} et inflige ${firstDamage} dégâts à **${firstAttacker.opponent.name}** !`;
-
-  // Créer l'image de combat
-  const battleImage = await createBattleImage(battleState);
+  // Vérifier si le premier attaquant est gelé (pas d'attaque) avec 20% de chance de dégel
+  if ((firstAttacker.isPlayer && battleState.playerStatus?.type === "freeze") ||
+      (!firstAttacker.isPlayer && battleState.wildStatus?.type === "freeze")) {
+    if (Math.random() < 0.2) {
+      // Dégel
+      if (firstAttacker.isPlayer) {
+        battleState.playerStatus = undefined;
+        battleMessage += `**${firstAttacker.pokemon.name}** n'est plus gelé !\n`;
+        firstCanAttack = true;
+      } else {
+        battleState.wildStatus = undefined;
+        battleMessage += `**${firstAttacker.pokemon.name}** n'est plus gelé !\n`;
+        firstCanAttack = true;
+      }
+    } else {
+      firstCanAttack = false;
+      battleMessage += `**${firstAttacker.pokemon.name}** est gelé et ne peut pas attaquer !\n`;
+    }
+  }
   
-  // Créer l'attachment pour Discord
-  const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
+  // Vérifier si le premier attaquant est endormi
+  if ((firstAttacker.isPlayer && battleState.playerStatus?.type === "sleep") ||
+      (!firstAttacker.isPlayer && battleState.wildStatus?.type === "sleep")) {
+    firstCanAttack = false;
+    battleMessage += `**${firstAttacker.pokemon.name}** est endormi et ne peut pas attaquer !\n`;
+  }
 
-  const createBattleEmbed = (message: string) => {
-    const fields: EmbedField[] = [
-      {
-        name: `${getTypeEmojis(battleState.playerPokemon)} ${battleState.playerPokemon.name} Nv.${battleState.playerPokemon.level}`,
-        value: createHPBar(battleState.playerPokemon.currentHp || 0, battleState.playerPokemon.stats?.hp || 0),
-        inline: true
-      },
-      {
-        name: '\u200b',
-        value: 'VS',
-        inline: true
-      },
-      {
-        name: `${getTypeEmojis(battleState.wildPokemon)} ${battleState.wildPokemon.name} Nv.${battleState.wildPokemon.level}`,
-        value: createHPBar(battleState.wildPokemon.currentHp || 0, battleState.wildPokemon.stats?.hp || 0),
-        inline: true
-      },
-      {
-        name: 'Déroulement du combat',
-        value: message,
-        inline: false
-      }
-    ];
-
-    return {
-      color: 0x0099FF,
-      title: '⚔️ Combat Pokémon',
-      description: '\u200b',
-      fields: fields,
-      image: {
-        url: 'attachment://battle.png'
-      }
-    };
-  };
+  // Première attaque
+  if (firstCanAttack) {
+    if (firstAttacker.isPlayer && playerMove.currentPP) playerMove.currentPP--;
+    const firstDamage = calculateDamage(firstAttacker.pokemon, firstAttacker.opponent, firstAttacker.move);
+    if (firstAttacker.opponent.currentHp !== undefined) {
+      firstAttacker.opponent.currentHp = Math.max(0, firstAttacker.opponent.currentHp - firstDamage);
+    }
+    
+    battleMessage += `**${firstAttacker.pokemon.name}** utilise ${firstAttacker.move.name} et inflige ${firstDamage} dégâts à **${firstAttacker.opponent.name}** !`;
+    
+    // Appliquer les effets de l'attaque
+    if (firstAttacker.move.effect) {
+      const effectMessage = applyMoveEffect(
+        { pokemon: firstAttacker.pokemon, isPlayer: firstAttacker.isPlayer },
+        { pokemon: firstAttacker.opponent, isPlayer: !firstAttacker.isPlayer },
+        firstAttacker.move,
+        battleState
+      );
+      battleMessage += effectMessage;
+    }
+  }
 
   // Vérifie si le combat est terminé après la première attaque
   if (firstAttacker.opponent.currentHp === 0) {
@@ -739,32 +793,103 @@ async function handleAttack(interaction: ButtonInteraction, moveName: string): P
       `\nLe ${firstAttacker.opponent.name} sauvage est K.O. !` : 
       `\nTon ${firstAttacker.opponent.name} est K.O. !`;
     
+    // Créer l'image de combat
+    const battleImage = await createBattleImage(battleState);
+    const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
+    
     interaction.reply({
-      embeds: [createBattleEmbed(battleMessage + defeatMessage)],
+      embeds: [createBattleEmbed(battleState, battleMessage + defeatMessage)],
       files: [attachment],
       components: [createExploreButton()]
     });
     return;
   }
 
-  // Deuxième attaque
-  if (secondAttacker.isPlayer && playerMove.currentPP) playerMove.currentPP--;
-  const secondDamage = calculateDamage(secondAttacker.pokemon, secondAttacker.opponent, secondAttacker.move);
-  if (secondAttacker.opponent.currentHp !== undefined) {
-    secondAttacker.opponent.currentHp = Math.max(0, secondAttacker.opponent.currentHp - secondDamage);
+  // Vérifier si le second attaquant est paralysé
+  if ((secondAttacker.isPlayer && battleState.playerStatus?.type === "paralysis") ||
+      (!secondAttacker.isPlayer && battleState.wildStatus?.type === "paralysis")) {
+    if (Math.random() < 0.25) {
+      secondCanAttack = false;
+      battleMessage += `\n**${secondAttacker.pokemon.name}** est paralysé et ne peut pas attaquer !`;
+    }
   }
   
-  battleMessage += `\n**${secondAttacker.pokemon.name}** utilise ${secondAttacker.move.name} et inflige ${secondDamage} dégâts à **${secondAttacker.opponent.name}** !`;
+  // Vérifier si le second attaquant est gelé
+  if ((secondAttacker.isPlayer && battleState.playerStatus?.type === "freeze") ||
+      (!secondAttacker.isPlayer && battleState.wildStatus?.type === "freeze")) {
+    if (Math.random() < 0.2) {
+      // Dégel
+      if (secondAttacker.isPlayer) {
+        battleState.playerStatus = undefined;
+        battleMessage += `\n**${secondAttacker.pokemon.name}** n'est plus gelé !`;
+        secondCanAttack = true;
+      } else {
+        battleState.wildStatus = undefined;
+        battleMessage += `\n**${secondAttacker.pokemon.name}** n'est plus gelé !`;
+        secondCanAttack = true;
+      }
+    } else {
+      secondCanAttack = false;
+      battleMessage += `\n**${secondAttacker.pokemon.name}** est gelé et ne peut pas attaquer !`;
+    }
+  }
+  
+  // Vérifier si le second attaquant est endormi
+  if ((secondAttacker.isPlayer && battleState.playerStatus?.type === "sleep") ||
+      (!secondAttacker.isPlayer && battleState.wildStatus?.type === "sleep")) {
+    secondCanAttack = false;
+    battleMessage += `\n**${secondAttacker.pokemon.name}** est endormi et ne peut pas attaquer !`;
+  }
+  
+  // Vérifier l'effet flinch (peur) si la première attaque a touché
+  if (firstCanAttack && firstAttacker.move.effect?.type === "flinch" && 
+      Math.random() * 100 <= (firstAttacker.move.effect.chance || 0)) {
+    secondCanAttack = false;
+    battleMessage += `\n**${secondAttacker.pokemon.name}** a peur et ne peut pas attaquer !`;
+  }
 
-  // Vérifie si le combat est terminé après la seconde attaque
-  if (secondAttacker.opponent.currentHp === 0) {
+  // Deuxième attaque
+  if (secondCanAttack) {
+    if (secondAttacker.isPlayer && playerMove.currentPP) playerMove.currentPP--;
+    const secondDamage = calculateDamage(secondAttacker.pokemon, secondAttacker.opponent, secondAttacker.move);
+    if (secondAttacker.opponent.currentHp !== undefined) {
+      secondAttacker.opponent.currentHp = Math.max(0, secondAttacker.opponent.currentHp - secondDamage);
+    }
+    
+    battleMessage += `\n**${secondAttacker.pokemon.name}** utilise ${secondAttacker.move.name} et inflige ${secondDamage} dégâts à **${secondAttacker.opponent.name}** !`;
+    
+    // Appliquer les effets de l'attaque
+    if (secondAttacker.move.effect) {
+      const effectMessage = applyMoveEffect(
+        { pokemon: secondAttacker.pokemon, isPlayer: secondAttacker.isPlayer },
+        { pokemon: secondAttacker.opponent, isPlayer: !secondAttacker.isPlayer },
+        secondAttacker.move,
+        battleState
+      );
+      battleMessage += effectMessage;
+    }
+  }
+
+  // Appliquer les dégâts des statuts (brûlure, poison, etc.)
+  const statusEffectsMessage = applyStatusEffects(battleState);
+  battleMessage += statusEffectsMessage;
+
+  // Vérifie si le combat est terminé après la seconde attaque ou les effets de statut
+  if (battleState.playerPokemon.currentHp === 0 || battleState.wildPokemon.currentHp === 0) {
+    const defeatedPokemon = battleState.playerPokemon.currentHp === 0 ? battleState.playerPokemon : battleState.wildPokemon;
+    const isPlayerDefeated = battleState.playerPokemon.currentHp === 0;
+    
     delete battleStates[interaction.user.id];
-    const defeatMessage = secondAttacker.isPlayer ? 
-      `\nLe ${secondAttacker.opponent.name} sauvage est K.O. !` : 
-      `\nTon ${secondAttacker.opponent.name} est K.O. !`;
+    const defeatMessage = isPlayerDefeated ? 
+      `\nTon ${defeatedPokemon.name} est K.O. !` : 
+      `\nLe ${defeatedPokemon.name} sauvage est K.O. !`;
+    
+    // Créer l'image de combat
+    const battleImage = await createBattleImage(battleState);
+    const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
     
     interaction.reply({
-      embeds: [createBattleEmbed(battleMessage + defeatMessage)],
+      embeds: [createBattleEmbed(battleState, battleMessage + defeatMessage)],
       files: [attachment],
       components: [createExploreButton()]
     });
@@ -783,9 +908,29 @@ async function handleAttack(interaction: ButtonInteraction, moveName: string): P
       );
     });
   }
+  
+  // Ajouter un bouton pour les statistiques
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId('battle_stats')
+      .setLabel('Statistiques')
+      .setStyle(ButtonStyle.Secondary)
+  );
+  
+  // Ajouter un bouton pour fuir
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId('flee')
+      .setLabel('Fuir')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  // Créer l'image de combat mise à jour
+  const battleImage = await createBattleImage(battleState);
+  const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
 
   interaction.reply({
-    embeds: [createBattleEmbed(battleMessage)],
+    embeds: [createBattleEmbed(battleState, battleMessage)],
     files: [attachment],
     content: `Que doit faire **${battleState.playerPokemon.name}** ?`,
     components: [row]
@@ -868,6 +1013,534 @@ function getPokemonId(pokemonName: string): string {
     }
   }
   return "0"; // Sprite par défaut si non trouvé
+}
+
+// Fonction pour appliquer les effets des attaques
+function applyMoveEffect(attacker: { pokemon: Pokemon, isPlayer: boolean }, defender: { pokemon: Pokemon, isPlayer: boolean }, move: Move, battleState: BattleState): string {
+  if (!move.effect || !move.effect.type) return "";
+  
+  const effectChance = move.effect.chance || 0;
+  // Vérifie si l'effet s'applique selon la probabilité
+  if (Math.random() * 100 > effectChance) return "";
+  
+  let effectMessage = "";
+  const targetStatusRef = defender.isPlayer ? 'playerStatus' : 'wildStatus';
+  
+  // Si la cible a déjà un statut, on n'en applique pas un nouveau
+  if (battleState[targetStatusRef]) return "";
+  
+  switch (move.effect.type) {
+    case "burn":
+      battleState[targetStatusRef] = { type: "burn" };
+      effectMessage = `${defender.pokemon.name} est brûlé !`;
+      break;
+    case "freeze":
+      battleState[targetStatusRef] = { type: "freeze" };
+      effectMessage = `${defender.pokemon.name} est gelé !`;
+      break;
+    case "paralysis":
+      battleState[targetStatusRef] = { type: "paralysis" };
+      effectMessage = `${defender.pokemon.name} est paralysé !`;
+      break;
+    case "sleep":
+      battleState[targetStatusRef] = { type: "sleep", turns: Math.floor(Math.random() * 3) + 1 };
+      effectMessage = `${defender.pokemon.name} s'est endormi !`;
+      break;
+    case "poison":
+      battleState[targetStatusRef] = { type: "poison" };
+      effectMessage = `${defender.pokemon.name} est empoisonné !`;
+      break;
+    case "attackDown":
+      effectMessage = `L'Attaque de ${defender.pokemon.name} baisse !`;
+      if (defender.pokemon.stats) defender.pokemon.stats.attack = Math.max(1, Math.floor(defender.pokemon.stats.attack * 0.67));
+      break;
+    case "defenseDown":
+      effectMessage = `La Défense de ${defender.pokemon.name} baisse !`;
+      if (defender.pokemon.stats) defender.pokemon.stats.defense = Math.max(1, Math.floor(defender.pokemon.stats.defense * 0.67));
+      break;
+    case "spAttackDown":
+      effectMessage = `L'Attaque Spé de ${defender.pokemon.name} baisse !`;
+      if (defender.pokemon.stats) defender.pokemon.stats.spAttack = Math.max(1, Math.floor(defender.pokemon.stats.spAttack * 0.67));
+      break;
+    case "spDefDown":
+      effectMessage = `La Défense Spé de ${defender.pokemon.name} baisse !`;
+      if (defender.pokemon.stats) defender.pokemon.stats.spDefense = Math.max(1, Math.floor(defender.pokemon.stats.spDefense * 0.67));
+      break;
+    case "speedDown":
+      effectMessage = `La Vitesse de ${defender.pokemon.name} baisse !`;
+      if (defender.pokemon.stats) defender.pokemon.stats.speed = Math.max(1, Math.floor(defender.pokemon.stats.speed * 0.67));
+      break;
+    case "accuracyDown":
+      effectMessage = `La Précision de ${defender.pokemon.name} baisse !`;
+      break;
+    case "flinch":
+      // L'effet de peur est traité séparément dans handleAttack
+      break;
+    case "rain":
+      effectMessage = `Il commence à pleuvoir !`;
+      break;
+    case "protect":
+      effectMessage = `${attacker.pokemon.name} se protège !`;
+      break;
+  }
+  
+  return effectMessage ? `\n${effectMessage}` : "";
+}
+
+// Fonction pour appliquer les dégâts des statuts
+function applyStatusEffects(battleState: BattleState): string {
+  let statusMessage = "";
+  
+  // Effets sur le Pokémon sauvage
+  if (battleState.wildStatus) {
+    switch (battleState.wildStatus.type) {
+      case "burn":
+        const burnDamage = Math.max(1, Math.floor((battleState.wildPokemon.stats?.hp || 100) / 16));
+        if (battleState.wildPokemon.currentHp !== undefined) {
+          battleState.wildPokemon.currentHp = Math.max(0, battleState.wildPokemon.currentHp - burnDamage);
+          statusMessage += `\n${battleState.wildPokemon.name} subit des dégâts de brûlure !`;
+        }
+        break;
+      case "poison":
+        const poisonDamage = Math.max(1, Math.floor((battleState.wildPokemon.stats?.hp || 100) / 8));
+        if (battleState.wildPokemon.currentHp !== undefined) {
+          battleState.wildPokemon.currentHp = Math.max(0, battleState.wildPokemon.currentHp - poisonDamage);
+          statusMessage += `\n${battleState.wildPokemon.name} subit des dégâts de poison !`;
+        }
+        break;
+    }
+  }
+  
+  // Effets sur le Pokémon du joueur
+  if (battleState.playerStatus) {
+    switch (battleState.playerStatus.type) {
+      case "burn":
+        const burnDamage = Math.max(1, Math.floor((battleState.playerPokemon.stats?.hp || 100) / 16));
+        if (battleState.playerPokemon.currentHp !== undefined) {
+          battleState.playerPokemon.currentHp = Math.max(0, battleState.playerPokemon.currentHp - burnDamage);
+          statusMessage += `\n${battleState.playerPokemon.name} subit des dégâts de brûlure !`;
+        }
+        break;
+      case "poison":
+        const poisonDamage = Math.max(1, Math.floor((battleState.playerPokemon.stats?.hp || 100) / 8));
+        if (battleState.playerPokemon.currentHp !== undefined) {
+          battleState.playerPokemon.currentHp = Math.max(0, battleState.playerPokemon.currentHp - poisonDamage);
+          statusMessage += `\n${battleState.playerPokemon.name} subit des dégâts de poison !`;
+        }
+        break;
+    }
+    
+    // Décrémenter les tours pour les statuts temporaires
+    if (battleState.playerStatus.turns !== undefined) {
+      battleState.playerStatus.turns--;
+      if (battleState.playerStatus.turns <= 0) {
+        statusMessage += `\n${battleState.playerPokemon.name} n'est plus ${getStatusMessage(battleState.playerStatus.type)} !`;
+        battleState.playerStatus = undefined;
+      }
+    }
+  }
+  
+  // Décrémenter les tours pour les statuts temporaires du Pokémon sauvage
+  if (battleState.wildStatus && battleState.wildStatus.turns !== undefined) {
+    battleState.wildStatus.turns--;
+    if (battleState.wildStatus.turns <= 0) {
+      statusMessage += `\n${battleState.wildPokemon.name} n'est plus ${getStatusMessage(battleState.wildStatus.type)} !`;
+      battleState.wildStatus = undefined;
+    }
+  }
+  
+  return statusMessage;
+}
+
+// Créer l'embed pour le combat
+const createBattleEmbed = (battleState: BattleState, message: string) => {
+  const fields: EmbedField[] = [
+    {
+      name: `${getTypeEmojis(battleState.playerPokemon)} ${battleState.playerPokemon.name} Nv.${battleState.playerPokemon.level}`,
+      value: createHPBar(battleState.playerPokemon.currentHp || 0, battleState.playerPokemon.stats?.hp || 0),
+      inline: true
+    },
+    {
+      name: '\u200b',
+      value: 'VS',
+      inline: true
+    },
+    {
+      name: `${getTypeEmojis(battleState.wildPokemon)} ${battleState.wildPokemon.name} Nv.${battleState.wildPokemon.level}`,
+      value: createHPBar(battleState.wildPokemon.currentHp || 0, battleState.wildPokemon.stats?.hp || 0),
+      inline: true
+    },
+    {
+      name: 'Déroulement du combat',
+      value: message,
+      inline: false
+    }
+  ];
+
+  return {
+    color: 0x0099FF,
+    title: '⚔️ Combat Pokémon',
+    description: '\u200b',
+    fields: fields,
+    image: {
+      url: 'attachment://battle.png'
+    }
+  };
+};
+
+// Fonction pour calculer l'efficacité d'un type contre un Pokémon
+function calculateTypeEffectivenessAgainst(attackType: string, defenderTypes: string[]): number {
+  let effectiveness = 1;
+  
+  for (const defenderType of defenderTypes) {
+    const multiplier = typeChart[attackType]?.[defenderType] || 1;
+    effectiveness *= multiplier;
+  }
+  
+  return effectiveness;
+}
+
+// Fonction pour afficher les statistiques détaillées du combat en cours
+async function handleBattleStatsCommand(message: Message, args: string[]): Promise<void> {
+  const userId = message.author.id;
+  const battleState = battleStates[userId];
+  
+  if (!battleState) {
+    message.reply("Aucun combat n'est en cours actuellement.");
+    return;
+  }
+  
+  const playerPokemon = battleState.playerPokemon;
+  const wildPokemon = battleState.wildPokemon;
+  
+  // Helper function to format stat with color indicators for bonuses/penalties
+  const formatStat = (currentStat: number, baseStat: number, level: number, statName: string): string => {
+    // Calculer la statistique normale au niveau actuel (sans modificateurs de combat)
+    let baseStatAtLevel;
+    
+    if (statName === 'hp') {
+      // Formule HP: ((Base * 2 * Niveau) / 100) + Niveau + 10
+      baseStatAtLevel = Math.floor((baseStat * 2 * level) / 100) + level + 10;
+    } else {
+      // Formule autres stats: ((Base * 2 * Niveau) / 100) + 5
+      baseStatAtLevel = Math.floor((baseStat * 2 * level) / 100) + 5;
+    }
+    
+    if (currentStat > baseStatAtLevel) {
+      return `${currentStat} (↑ ${baseStatAtLevel})`;
+    } else if (currentStat < baseStatAtLevel) {
+      return `${currentStat} (↓ ${baseStatAtLevel})`;
+    } else {
+      return `${currentStat} (= ${baseStatAtLevel})`;
+    }
+  };
+  
+  // Helper function for HP formatting
+  const formatHP = (current: number, max: number): string => {
+    const ratio = current / max;
+    if (ratio < 0.25) {
+      return `${current}/${max} [CRITIQUE]`;
+    } else if (ratio < 0.5) {
+      return `${current}/${max} [FAIBLE]`;
+    } else {
+      return `${current}/${max}`;
+    }
+  };
+  
+  // Helper function to format effectiveness
+  const formatEffectiveness = (effectiveness: number): string => {
+    if (effectiveness === 0) return "Inefficace";
+    if (effectiveness < 1) return `Peu efficace (x${effectiveness})`;
+    if (effectiveness > 1) return `Super efficace (x${effectiveness})`;
+    return "Efficacité normale";
+  };
+  
+  // Récupérer les moves disponibles du joueur
+  const moveTypes = playerPokemon.moves?.map(move => move.type) || [];
+  // Éliminer les doublons
+  const uniqueMoveTypes = [...new Set(moveTypes)];
+  
+  // Calculer l'efficacité de chaque type de move contre l'adversaire
+  const moveTypeEffectiveness = uniqueMoveTypes.map(type => ({
+    type,
+    effectiveness: calculateTypeEffectivenessAgainst(type, wildPokemon.types)
+  })).sort((a, b) => b.effectiveness - a.effectiveness);
+  
+  // Création d'un embed avec les statistiques complètes
+  const statsEmbed = {
+    color: 0x0099FF,
+    title: '📊 Statistiques du combat',
+    description: `Combat entre **${playerPokemon.name}** (Nv.${playerPokemon.level}) et **${wildPokemon.name}** sauvage (Nv.${wildPokemon.level})`,
+    fields: [
+      {
+        name: `🧠 Statut de ${playerPokemon.name}`,
+        value: battleState.playerStatus ? 
+          `${getStatusMessage(battleState.playerStatus.type).toUpperCase()}` : 
+          "Normal",
+        inline: true
+      },
+      {
+        name: `🧠 Statut de ${wildPokemon.name}`,
+        value: battleState.wildStatus ? 
+          `${getStatusMessage(battleState.wildStatus.type).toUpperCase()}` : 
+          "Normal",
+        inline: true
+      },
+      { name: '\u200b', value: '\u200b', inline: false }, // Séparateur
+      // Stats du Pokémon du joueur
+      {
+        name: `📈 Statistiques de ${playerPokemon.name}`,
+        value: "```" +
+          `PV: ${formatHP(playerPokemon.currentHp || 0, playerPokemon.stats?.hp || 1)}\n` +
+          `Attaque: ${formatStat(playerPokemon.stats?.attack || 0, playerPokemon.baseStats.attack, playerPokemon.level || 5, 'attack')}\n` +
+          `Défense: ${formatStat(playerPokemon.stats?.defense || 0, playerPokemon.baseStats.defense, playerPokemon.level || 5, 'defense')}\n` +
+          `Att.Spé: ${formatStat(playerPokemon.stats?.spAttack || 0, playerPokemon.baseStats.spAttack, playerPokemon.level || 5, 'spAttack')}\n` +
+          `Déf.Spé: ${formatStat(playerPokemon.stats?.spDefense || 0, playerPokemon.baseStats.spDefense, playerPokemon.level || 5, 'spDefense')}\n` +
+          `Vitesse: ${formatStat(playerPokemon.stats?.speed || 0, playerPokemon.baseStats.speed, playerPokemon.level || 5, 'speed')}` +
+          "```",
+        inline: true
+      },
+      // Stats du Pokémon sauvage
+      {
+        name: `📉 Statistiques de ${wildPokemon.name}`,
+        value: "```" +
+          `PV: ${formatHP(wildPokemon.currentHp || 0, wildPokemon.stats?.hp || 1)}\n` +
+          `Attaque: ${formatStat(wildPokemon.stats?.attack || 0, wildPokemon.baseStats.attack, wildPokemon.level || 5, 'attack')}\n` +
+          `Défense: ${formatStat(wildPokemon.stats?.defense || 0, wildPokemon.baseStats.defense, wildPokemon.level || 5, 'defense')}\n` +
+          `Att.Spé: ${formatStat(wildPokemon.stats?.spAttack || 0, wildPokemon.baseStats.spAttack, wildPokemon.level || 5, 'spAttack')}\n` +
+          `Déf.Spé: ${formatStat(wildPokemon.stats?.spDefense || 0, wildPokemon.baseStats.spDefense, wildPokemon.level || 5, 'spDefense')}\n` +
+          `Vitesse: ${formatStat(wildPokemon.stats?.speed || 0, wildPokemon.baseStats.speed, wildPokemon.level || 5, 'speed')}` +
+          "```",
+        inline: true
+      },
+      { name: '\u200b', value: '\u200b', inline: false }, // Séparateur
+      // Efficacité des attaques contre l'adversaire
+      {
+        name: '🎯 Efficacité de vos attaques',
+        value: moveTypeEffectiveness.length > 0 ?
+          moveTypeEffectiveness.map(item => 
+            `**Type ${item.type}**: ${formatEffectiveness(item.effectiveness)}`
+          ).join('\n') : 
+          "Aucune information d'efficacité disponible",
+        inline: false
+      },
+      // Attaques disponibles du Pokémon du joueur
+      {
+        name: '⚔️ Attaques disponibles',
+        value: playerPokemon.moves?.map(move => 
+          `**${move.name}** (${move.currentPP}/${move.pp}) - Type: ${move.type}, ` +
+          `Puissance: ${move.power}, Précision: ${move.accuracy}` +
+          `${move.effect ? `, Effet: ${move.effect.type} (${move.effect.chance}%)` : ''}`
+        ).join('\n') || "Aucune attaque disponible",
+        inline: false
+      },
+      // Faiblesses et résistances du Pokémon adversaire
+      {
+        name: `🛡️ Faiblesses et résistances de ${wildPokemon.name}`,
+        value: wildPokemon.types.map(type => {
+          const weaknesses = Object.entries(typeChart[type])
+            .filter(([_, value]) => typeof value === 'number' && (value as number) > 1)
+            .map(([typeName, value]) => `${typeName} (x${value})`);
+          
+          const resistances = Object.entries(typeChart[type])
+            .filter(([_, value]) => typeof value === 'number' && (value as number) < 1 && (value as number) > 0)
+            .map(([typeName, value]) => `${typeName} (x${value})`);
+          
+          const immunities = Object.entries(typeChart[type])
+            .filter(([_, value]) => value === 0)
+            .map(([typeName]) => typeName);
+          
+          return `**Type ${type}**:\n` +
+            `Faiblesses: ${weaknesses.length ? weaknesses.join(', ') : 'Aucune'}\n` +
+            `Résistances: ${resistances.length ? resistances.join(', ') : 'Aucune'}\n` +
+            `Immunités: ${immunities.length ? immunities.join(', ') : 'Aucune'}`;
+        }).join('\n\n'),
+        inline: false
+      }
+    ],
+    footer: {
+      text: `${message.author.username} - ${new Date().toLocaleString('fr-FR')}`
+    }
+  };
+  
+  message.reply({ embeds: [statsEmbed] });
+}
+
+// Fonction pour gérer l'interaction avec le bouton des statistiques de combat
+async function handleBattleStatsInteraction(interaction: ButtonInteraction): Promise<void> {
+  const userId = interaction.user.id;
+  const battleState = battleStates[userId];
+  
+  if (!battleState) {
+    interaction.reply({ content: "Aucun combat n'est en cours actuellement.", ephemeral: true });
+    return;
+  }
+  
+  const playerPokemon = battleState.playerPokemon;
+  const wildPokemon = battleState.wildPokemon;
+  
+  // Helper function to format stat with color indicators for bonuses/penalties
+  const formatStat = (currentStat: number, baseStat: number, level: number, statName: string): string => {
+    // Calculer la statistique normale au niveau actuel (sans modificateurs de combat)
+    let baseStatAtLevel;
+    
+    if (statName === 'hp') {
+      // Formule HP: ((Base * 2 * Niveau) / 100) + Niveau + 10
+      baseStatAtLevel = Math.floor((baseStat * 2 * level) / 100) + level + 10;
+    } else {
+      // Formule autres stats: ((Base * 2 * Niveau) / 100) + 5
+      baseStatAtLevel = Math.floor((baseStat * 2 * level) / 100) + 5;
+    }
+    
+    if (currentStat > baseStatAtLevel) {
+      return `${currentStat} (↑ ${baseStatAtLevel})`;
+    } else if (currentStat < baseStatAtLevel) {
+      return `${currentStat} (↓ ${baseStatAtLevel})`;
+    } else {
+      return `${currentStat} (= ${baseStatAtLevel})`;
+    }
+  };
+  
+  // Helper function for HP formatting
+  const formatHP = (current: number, max: number): string => {
+    const ratio = current / max;
+    if (ratio < 0.25) {
+      return `${current}/${max} [CRITIQUE]`;
+    } else if (ratio < 0.5) {
+      return `${current}/${max} [FAIBLE]`;
+    } else {
+      return `${current}/${max}`;
+    }
+  };
+  
+  // Helper function to format effectiveness
+  const formatEffectiveness = (effectiveness: number): string => {
+    if (effectiveness === 0) return "Inefficace";
+    if (effectiveness < 1) return `Peu efficace (x${effectiveness})`;
+    if (effectiveness > 1) return `Super efficace (x${effectiveness})`;
+    return "Efficacité normale";
+  };
+  
+  // Récupérer les moves disponibles du joueur
+  const moveTypes = playerPokemon.moves?.map(move => move.type) || [];
+  // Éliminer les doublons
+  const uniqueMoveTypes = [...new Set(moveTypes)];
+  
+  // Calculer l'efficacité de chaque type de move contre l'adversaire
+  const moveTypeEffectiveness = uniqueMoveTypes.map(type => ({
+    type,
+    effectiveness: calculateTypeEffectivenessAgainst(type, wildPokemon.types)
+  })).sort((a, b) => b.effectiveness - a.effectiveness);
+  
+  // Création d'un embed avec les statistiques complètes
+  const statsEmbed = {
+    color: 0x0099FF,
+    title: '📊 Statistiques du combat',
+    description: `Combat entre **${playerPokemon.name}** (Nv.${playerPokemon.level}) et **${wildPokemon.name}** sauvage (Nv.${wildPokemon.level})`,
+    fields: [
+      {
+        name: `🧠 Statut de ${playerPokemon.name}`,
+        value: battleState.playerStatus ? 
+          `${getStatusMessage(battleState.playerStatus.type).toUpperCase()}` : 
+          "Normal",
+        inline: true
+      },
+      {
+        name: `🧠 Statut de ${wildPokemon.name}`,
+        value: battleState.wildStatus ? 
+          `${getStatusMessage(battleState.wildStatus.type).toUpperCase()}` : 
+          "Normal",
+        inline: true
+      },
+      { name: '\u200b', value: '\u200b', inline: false }, // Séparateur
+      // Stats du Pokémon du joueur
+      {
+        name: `📈 Statistiques de ${playerPokemon.name}`,
+        value: "```" +
+          `PV: ${formatHP(playerPokemon.currentHp || 0, playerPokemon.stats?.hp || 1)}\n` +
+          `Attaque: ${formatStat(playerPokemon.stats?.attack || 0, playerPokemon.baseStats.attack, playerPokemon.level || 5, 'attack')}\n` +
+          `Défense: ${formatStat(playerPokemon.stats?.defense || 0, playerPokemon.baseStats.defense, playerPokemon.level || 5, 'defense')}\n` +
+          `Att.Spé: ${formatStat(playerPokemon.stats?.spAttack || 0, playerPokemon.baseStats.spAttack, playerPokemon.level || 5, 'spAttack')}\n` +
+          `Déf.Spé: ${formatStat(playerPokemon.stats?.spDefense || 0, playerPokemon.baseStats.spDefense, playerPokemon.level || 5, 'spDefense')}\n` +
+          `Vitesse: ${formatStat(playerPokemon.stats?.speed || 0, playerPokemon.baseStats.speed, playerPokemon.level || 5, 'speed')}` +
+          "```",
+        inline: true
+      },
+      // Stats du Pokémon sauvage
+      {
+        name: `📉 Statistiques de ${wildPokemon.name}`,
+        value: "```" +
+          `PV: ${formatHP(wildPokemon.currentHp || 0, wildPokemon.stats?.hp || 1)}\n` +
+          `Attaque: ${formatStat(wildPokemon.stats?.attack || 0, wildPokemon.baseStats.attack, wildPokemon.level || 5, 'attack')}\n` +
+          `Défense: ${formatStat(wildPokemon.stats?.defense || 0, wildPokemon.baseStats.defense, wildPokemon.level || 5, 'defense')}\n` +
+          `Att.Spé: ${formatStat(wildPokemon.stats?.spAttack || 0, wildPokemon.baseStats.spAttack, wildPokemon.level || 5, 'spAttack')}\n` +
+          `Déf.Spé: ${formatStat(wildPokemon.stats?.spDefense || 0, wildPokemon.baseStats.spDefense, wildPokemon.level || 5, 'spDefense')}\n` +
+          `Vitesse: ${formatStat(wildPokemon.stats?.speed || 0, wildPokemon.baseStats.speed, wildPokemon.level || 5, 'speed')}` +
+          "```",
+        inline: true
+      },
+      { name: '\u200b', value: '\u200b', inline: false }, // Séparateur
+      // Efficacité des attaques contre l'adversaire
+      {
+        name: '🎯 Efficacité de vos attaques',
+        value: moveTypeEffectiveness.length > 0 ?
+          moveTypeEffectiveness.map(item => 
+            `**Type ${item.type}**: ${formatEffectiveness(item.effectiveness)}`
+          ).join('\n') : 
+          "Aucune information d'efficacité disponible",
+        inline: false
+      },
+      // Attaques disponibles du Pokémon du joueur
+      {
+        name: '⚔️ Attaques disponibles',
+        value: playerPokemon.moves?.map(move => 
+          `**${move.name}** (${move.currentPP}/${move.pp}) - Type: ${move.type}, ` +
+          `Puissance: ${move.power}, Précision: ${move.accuracy}` +
+          `${move.effect ? `, Effet: ${move.effect.type} (${move.effect.chance}%)` : ''}`
+        ).join('\n') || "Aucune attaque disponible",
+        inline: false
+      },
+      // Faiblesses et résistances du Pokémon adversaire
+      {
+        name: `🛡️ Faiblesses et résistances de ${wildPokemon.name}`,
+        value: wildPokemon.types.map(type => {
+          const weaknesses = Object.entries(typeChart[type])
+            .filter(([_, value]) => typeof value === 'number' && (value as number) > 1)
+            .map(([typeName, value]) => `${typeName} (x${value})`);
+          
+          const resistances = Object.entries(typeChart[type])
+            .filter(([_, value]) => typeof value === 'number' && (value as number) < 1 && (value as number) > 0)
+            .map(([typeName, value]) => `${typeName} (x${value})`);
+          
+          const immunities = Object.entries(typeChart[type])
+            .filter(([_, value]) => value === 0)
+            .map(([typeName]) => typeName);
+          
+          return `**Type ${type}**:\n` +
+            `Faiblesses: ${weaknesses.length ? weaknesses.join(', ') : 'Aucune'}\n` +
+            `Résistances: ${resistances.length ? resistances.join(', ') : 'Aucune'}\n` +
+            `Immunités: ${immunities.length ? immunities.join(', ') : 'Aucune'}`;
+        }).join('\n\n'),
+        inline: false
+      }
+    ],
+    footer: {
+      text: `${interaction.user.username} - ${new Date().toLocaleString('fr-FR')}`
+    }
+  };
+  
+  // Créer les boutons pour revenir au combat
+  const row = new ActionRowBuilder<ButtonBuilder>();
+  
+  // Bouton pour revenir au combat
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId('return_to_battle')
+      .setLabel('Retour au combat')
+      .setStyle(ButtonStyle.Secondary)
+  );
+  
+  await interaction.reply({ embeds: [statsEmbed], components: [row], ephemeral: true });
 }
 
 // Connecter le bot

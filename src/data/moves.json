@@ -316,5 +316,86 @@
     "accuracy": 90,
     "pp": 25,
     "effect": null
+  },
+  "ecume": {
+    "name": "Écume",
+    "type": "Eau",
+    "category": "Spécial",
+    "power": 40,
+    "accuracy": 100,
+    "pp": 30,
+    "effect": {
+      "type": "speedDown",
+      "chance": 10
+    }
+  },
+  "mimi-queue": {
+    "name": "Mimi-Queue",
+    "type": "Normal",
+    "category": "Statut",
+    "power": 0,
+    "accuracy": 100,
+    "pp": 30,
+    "effect": {
+      "type": "defenseDown",
+      "chance": 100
+    }
+  },
+  "abri": {
+    "name": "Abri",
+    "type": "Normal",
+    "category": "Statut",
+    "power": 0,
+    "accuracy": 100,
+    "pp": 10,
+    "effect": {
+      "type": "protect",
+      "chance": 100
+    }
+  },
+  "bulle-d-o": {
+    "name": "Bulle d'O",
+    "type": "Eau",
+    "category": "Spécial",
+    "power": 65,
+    "accuracy": 100,
+    "pp": 20,
+    "effect": {
+      "type": "speedDown",
+      "chance": 10
+    }
+  },
+  "morsure": {
+    "name": "Morsure",
+    "type": "Ténèbres",
+    "category": "Physique",
+    "power": 60,
+    "accuracy": 100,
+    "pp": 25,
+    "effect": {
+      "type": "flinch",
+      "chance": 30
+    }
+  },
+  "danse-pluie": {
+    "name": "Danse Pluie",
+    "type": "Eau",
+    "category": "Statut",
+    "power": 0,
+    "accuracy": 100,
+    "pp": 5,
+    "effect": {
+      "type": "rain",
+      "chance": 100
+    }
+  },
+  "hydro-queue": {
+    "name": "Hydro-Queue",
+    "type": "Eau",
+    "category": "Physique",
+    "power": 90,
+    "accuracy": 90,
+    "pp": 10,
+    "effect": null
   }
 } 

@@ -85,6 +85,8 @@ interface BattleState {
     type: string;
     turns?: number;
   };
+  initialPlayerStats?: Stats;  // Statistiques du Pokémon du joueur au début du combat
+  initialWildStats?: Stats;    // Statistiques du Pokémon sauvage au début du combat
 }
 
 // Constantes
@@ -460,7 +462,7 @@ function handleWildPokemonSearch(interaction: ButtonInteraction, currentLocation
       });
     }
   });
-
+  
   const wildPokemonInstance: Pokemon = {
     ...foundPokemon,
     level: wildPokemonLevel,
@@ -468,6 +470,12 @@ function handleWildPokemonSearch(interaction: ButtonInteraction, currentLocation
     currentHp: wildPokemonStats.hp,
     moves: availableMoves
   };
+  
+  const playerPokemon = players[interaction.user.id].pokemons[0];
+  
+  // Sauvegarde des statistiques initiales
+  const initialPlayerStats = playerPokemon.stats ? { ...playerPokemon.stats } : undefined;
+  const initialWildStats = { ...wildPokemonStats };
 
   const row = new ActionRowBuilder<ButtonBuilder>()
     .addComponents(
@@ -483,7 +491,9 @@ function handleWildPokemonSearch(interaction: ButtonInteraction, currentLocation
 
   battleStates[interaction.user.id] = {
     wildPokemon: wildPokemonInstance,
-    playerPokemon: players[interaction.user.id].pokemons[0]
+    playerPokemon: playerPokemon,
+    initialPlayerStats,
+    initialWildStats
   };
 
   interaction.reply({ 
@@ -621,6 +631,14 @@ async function handleBattle(interaction: ButtonInteraction): Promise<void> {
 
   const playerPokemon = battleState.playerPokemon;
   const wildPokemon = battleState.wildPokemon;
+
+  // Sauvegarder les statistiques initiales si elles n'existent pas encore
+  if (!battleState.initialPlayerStats && playerPokemon.stats) {
+    battleState.initialPlayerStats = { ...playerPokemon.stats };
+  }
+  if (!battleState.initialWildStats && wildPokemon.stats) {
+    battleState.initialWildStats = { ...wildPokemon.stats };
+  }
 
   const playerMaxHP = playerPokemon.stats?.hp || 0;
   const wildMaxHP = wildPokemon.stats?.hp || 0;
@@ -1214,24 +1232,13 @@ async function handleBattleStatsCommand(message: Message, args: string[]): Promi
   const wildPokemon = battleState.wildPokemon;
   
   // Helper function to format stat with color indicators for bonuses/penalties
-  const formatStat = (currentStat: number, baseStat: number, level: number, statName: string): string => {
-    // Calculer la statistique normale au niveau actuel (sans modificateurs de combat)
-    let baseStatAtLevel;
-    
-    if (statName === 'hp') {
-      // Formule HP: ((Base * 2 * Niveau) / 100) + Niveau + 10
-      baseStatAtLevel = Math.floor((baseStat * 2 * level) / 100) + level + 10;
+  const formatStat = (currentStat: number, initialStat: number): string => {
+    if (currentStat > initialStat) {
+      return `${currentStat} (↑ ${initialStat})`;
+    } else if (currentStat < initialStat) {
+      return `${currentStat} (↓ ${initialStat})`;
     } else {
-      // Formule autres stats: ((Base * 2 * Niveau) / 100) + 5
-      baseStatAtLevel = Math.floor((baseStat * 2 * level) / 100) + 5;
-    }
-    
-    if (currentStat > baseStatAtLevel) {
-      return `${currentStat} (↑ ${baseStatAtLevel})`;
-    } else if (currentStat < baseStatAtLevel) {
-      return `${currentStat} (↓ ${baseStatAtLevel})`;
-    } else {
-      return `${currentStat} (= ${baseStatAtLevel})`;
+      return `${currentStat} (= ${initialStat})`;
     }
   };
   
@@ -1292,11 +1299,11 @@ async function handleBattleStatsCommand(message: Message, args: string[]): Promi
         name: `📈 Statistiques de ${playerPokemon.name}`,
         value: "```" +
           `PV: ${formatHP(playerPokemon.currentHp || 0, playerPokemon.stats?.hp || 1)}\n` +
-          `Attaque: ${formatStat(playerPokemon.stats?.attack || 0, playerPokemon.baseStats.attack, playerPokemon.level || 5, 'attack')}\n` +
-          `Défense: ${formatStat(playerPokemon.stats?.defense || 0, playerPokemon.baseStats.defense, playerPokemon.level || 5, 'defense')}\n` +
-          `Att.Spé: ${formatStat(playerPokemon.stats?.spAttack || 0, playerPokemon.baseStats.spAttack, playerPokemon.level || 5, 'spAttack')}\n` +
-          `Déf.Spé: ${formatStat(playerPokemon.stats?.spDefense || 0, playerPokemon.baseStats.spDefense, playerPokemon.level || 5, 'spDefense')}\n` +
-          `Vitesse: ${formatStat(playerPokemon.stats?.speed || 0, playerPokemon.baseStats.speed, playerPokemon.level || 5, 'speed')}` +
+          `Attaque: ${formatStat(playerPokemon.stats?.attack || 0, battleState.initialPlayerStats?.attack || playerPokemon.stats?.attack || 0)}\n` +
+          `Défense: ${formatStat(playerPokemon.stats?.defense || 0, battleState.initialPlayerStats?.defense || playerPokemon.stats?.defense || 0)}\n` +
+          `Att.Spé: ${formatStat(playerPokemon.stats?.spAttack || 0, battleState.initialPlayerStats?.spAttack || playerPokemon.stats?.spAttack || 0)}\n` +
+          `Déf.Spé: ${formatStat(playerPokemon.stats?.spDefense || 0, battleState.initialPlayerStats?.spDefense || playerPokemon.stats?.spDefense || 0)}\n` +
+          `Vitesse: ${formatStat(playerPokemon.stats?.speed || 0, battleState.initialPlayerStats?.speed || playerPokemon.stats?.speed || 0)}` +
           "```",
         inline: true
       },
@@ -1305,11 +1312,11 @@ async function handleBattleStatsCommand(message: Message, args: string[]): Promi
         name: `📉 Statistiques de ${wildPokemon.name}`,
         value: "```" +
           `PV: ${formatHP(wildPokemon.currentHp || 0, wildPokemon.stats?.hp || 1)}\n` +
-          `Attaque: ${formatStat(wildPokemon.stats?.attack || 0, wildPokemon.baseStats.attack, wildPokemon.level || 5, 'attack')}\n` +
-          `Défense: ${formatStat(wildPokemon.stats?.defense || 0, wildPokemon.baseStats.defense, wildPokemon.level || 5, 'defense')}\n` +
-          `Att.Spé: ${formatStat(wildPokemon.stats?.spAttack || 0, wildPokemon.baseStats.spAttack, wildPokemon.level || 5, 'spAttack')}\n` +
-          `Déf.Spé: ${formatStat(wildPokemon.stats?.spDefense || 0, wildPokemon.baseStats.spDefense, wildPokemon.level || 5, 'spDefense')}\n` +
-          `Vitesse: ${formatStat(wildPokemon.stats?.speed || 0, wildPokemon.baseStats.speed, wildPokemon.level || 5, 'speed')}` +
+          `Attaque: ${formatStat(wildPokemon.stats?.attack || 0, battleState.initialWildStats?.attack || wildPokemon.stats?.attack || 0)}\n` +
+          `Défense: ${formatStat(wildPokemon.stats?.defense || 0, battleState.initialWildStats?.defense || wildPokemon.stats?.defense || 0)}\n` +
+          `Att.Spé: ${formatStat(wildPokemon.stats?.spAttack || 0, battleState.initialWildStats?.spAttack || wildPokemon.stats?.spAttack || 0)}\n` +
+          `Déf.Spé: ${formatStat(wildPokemon.stats?.spDefense || 0, battleState.initialWildStats?.spDefense || wildPokemon.stats?.spDefense || 0)}\n` +
+          `Vitesse: ${formatStat(wildPokemon.stats?.speed || 0, battleState.initialWildStats?.speed || wildPokemon.stats?.speed || 0)}` +
           "```",
         inline: true
       },
@@ -1380,24 +1387,13 @@ async function handleBattleStatsInteraction(interaction: ButtonInteraction): Pro
   const wildPokemon = battleState.wildPokemon;
   
   // Helper function to format stat with color indicators for bonuses/penalties
-  const formatStat = (currentStat: number, baseStat: number, level: number, statName: string): string => {
-    // Calculer la statistique normale au niveau actuel (sans modificateurs de combat)
-    let baseStatAtLevel;
-    
-    if (statName === 'hp') {
-      // Formule HP: ((Base * 2 * Niveau) / 100) + Niveau + 10
-      baseStatAtLevel = Math.floor((baseStat * 2 * level) / 100) + level + 10;
+  const formatStat = (currentStat: number, initialStat: number): string => {
+    if (currentStat > initialStat) {
+      return `${currentStat} (↑ ${initialStat})`;
+    } else if (currentStat < initialStat) {
+      return `${currentStat} (↓ ${initialStat})`;
     } else {
-      // Formule autres stats: ((Base * 2 * Niveau) / 100) + 5
-      baseStatAtLevel = Math.floor((baseStat * 2 * level) / 100) + 5;
-    }
-    
-    if (currentStat > baseStatAtLevel) {
-      return `${currentStat} (↑ ${baseStatAtLevel})`;
-    } else if (currentStat < baseStatAtLevel) {
-      return `${currentStat} (↓ ${baseStatAtLevel})`;
-    } else {
-      return `${currentStat} (= ${baseStatAtLevel})`;
+      return `${currentStat} (= ${initialStat})`;
     }
   };
   
@@ -1458,11 +1454,11 @@ async function handleBattleStatsInteraction(interaction: ButtonInteraction): Pro
         name: `📈 Statistiques de ${playerPokemon.name}`,
         value: "```" +
           `PV: ${formatHP(playerPokemon.currentHp || 0, playerPokemon.stats?.hp || 1)}\n` +
-          `Attaque: ${formatStat(playerPokemon.stats?.attack || 0, playerPokemon.baseStats.attack, playerPokemon.level || 5, 'attack')}\n` +
-          `Défense: ${formatStat(playerPokemon.stats?.defense || 0, playerPokemon.baseStats.defense, playerPokemon.level || 5, 'defense')}\n` +
-          `Att.Spé: ${formatStat(playerPokemon.stats?.spAttack || 0, playerPokemon.baseStats.spAttack, playerPokemon.level || 5, 'spAttack')}\n` +
-          `Déf.Spé: ${formatStat(playerPokemon.stats?.spDefense || 0, playerPokemon.baseStats.spDefense, playerPokemon.level || 5, 'spDefense')}\n` +
-          `Vitesse: ${formatStat(playerPokemon.stats?.speed || 0, playerPokemon.baseStats.speed, playerPokemon.level || 5, 'speed')}` +
+          `Attaque: ${formatStat(playerPokemon.stats?.attack || 0, battleState.initialPlayerStats?.attack || playerPokemon.stats?.attack || 0)}\n` +
+          `Défense: ${formatStat(playerPokemon.stats?.defense || 0, battleState.initialPlayerStats?.defense || playerPokemon.stats?.defense || 0)}\n` +
+          `Att.Spé: ${formatStat(playerPokemon.stats?.spAttack || 0, battleState.initialPlayerStats?.spAttack || playerPokemon.stats?.spAttack || 0)}\n` +
+          `Déf.Spé: ${formatStat(playerPokemon.stats?.spDefense || 0, battleState.initialPlayerStats?.spDefense || playerPokemon.stats?.spDefense || 0)}\n` +
+          `Vitesse: ${formatStat(playerPokemon.stats?.speed || 0, battleState.initialPlayerStats?.speed || playerPokemon.stats?.speed || 0)}` +
           "```",
         inline: true
       },
@@ -1471,11 +1467,11 @@ async function handleBattleStatsInteraction(interaction: ButtonInteraction): Pro
         name: `📉 Statistiques de ${wildPokemon.name}`,
         value: "```" +
           `PV: ${formatHP(wildPokemon.currentHp || 0, wildPokemon.stats?.hp || 1)}\n` +
-          `Attaque: ${formatStat(wildPokemon.stats?.attack || 0, wildPokemon.baseStats.attack, wildPokemon.level || 5, 'attack')}\n` +
-          `Défense: ${formatStat(wildPokemon.stats?.defense || 0, wildPokemon.baseStats.defense, wildPokemon.level || 5, 'defense')}\n` +
-          `Att.Spé: ${formatStat(wildPokemon.stats?.spAttack || 0, wildPokemon.baseStats.spAttack, wildPokemon.level || 5, 'spAttack')}\n` +
-          `Déf.Spé: ${formatStat(wildPokemon.stats?.spDefense || 0, wildPokemon.baseStats.spDefense, wildPokemon.level || 5, 'spDefense')}\n` +
-          `Vitesse: ${formatStat(wildPokemon.stats?.speed || 0, wildPokemon.baseStats.speed, wildPokemon.level || 5, 'speed')}` +
+          `Attaque: ${formatStat(wildPokemon.stats?.attack || 0, battleState.initialWildStats?.attack || wildPokemon.stats?.attack || 0)}\n` +
+          `Défense: ${formatStat(wildPokemon.stats?.defense || 0, battleState.initialWildStats?.defense || wildPokemon.stats?.defense || 0)}\n` +
+          `Att.Spé: ${formatStat(wildPokemon.stats?.spAttack || 0, battleState.initialWildStats?.spAttack || wildPokemon.stats?.spAttack || 0)}\n` +
+          `Déf.Spé: ${formatStat(wildPokemon.stats?.spDefense || 0, battleState.initialWildStats?.spDefense || wildPokemon.stats?.spDefense || 0)}\n` +
+          `Vitesse: ${formatStat(wildPokemon.stats?.speed || 0, battleState.initialWildStats?.speed || wildPokemon.stats?.speed || 0)}` +
           "```",
         inline: true
       },

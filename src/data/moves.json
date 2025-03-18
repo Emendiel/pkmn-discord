@@ -1,5 +1,6 @@
-{
-  "charge": {
+[
+  {
+    "id": "charge",
     "name": "Charge",
     "type": "Normal",
     "category": "Physique",
@@ -8,7 +9,8 @@
     "pp": 35,
     "effect": null
   },
-  "griffe": {
+  {
+    "id": "griffe",
     "name": "Griffe",
     "type": "Normal",
     "category": "Physique",
@@ -17,7 +19,8 @@
     "pp": 35,
     "effect": null
   },
-  "flammeche": {
+  {
+    "id": "flammeche",
     "name": "Flammèche",
     "type": "Feu",
     "category": "Spécial",
@@ -29,7 +32,8 @@
       "chance": 10
     }
   },
-  "pistolet-a-o": {
+  {
+    "id": "pistolet-a-o",
     "name": "Pistolet à O",
     "type": "Eau",
     "category": "Spécial",
@@ -38,7 +42,8 @@
     "pp": 25,
     "effect": null
   },
-  "fouet-lianes": {
+  {
+    "id": "fouet-lianes",
     "name": "Fouet Lianes",
     "type": "Plante",
     "category": "Physique",
@@ -47,7 +52,8 @@
     "pp": 25,
     "effect": null
   },
-  "eclair": {
+  {
+    "id": "eclair",
     "name": "Éclair",
     "type": "Électrique",
     "category": "Spécial",
@@ -59,7 +65,8 @@
       "chance": 10
     }
   },
-  "lance-flammes": {
+  {
+    "id": "lance-flammes",
     "name": "Lance-Flammes",
     "type": "Feu",
     "category": "Spécial",
@@ -71,7 +78,8 @@
       "chance": 10
     }
   },
-  "hydrocanon": {
+  {
+    "id": "hydrocanon",
     "name": "Hydrocanon",
     "type": "Eau",
     "category": "Spécial",
@@ -80,7 +88,8 @@
     "pp": 5,
     "effect": null
   },
-  "ultralaser": {
+  {
+    "id": "ultralaser",
     "name": "Ultralaser",
     "type": "Normal",
     "category": "Spécial",
@@ -92,7 +101,8 @@
       "chance": 100
     }
   },
-  "poudre-dodo": {
+  {
+    "id": "poudre-dodo",
     "name": "Poudre Dodo",
     "type": "Plante",
     "category": "Statut",
@@ -104,7 +114,8 @@
       "chance": 100
     }
   },
-  "hypnose": {
+  {
+    "id": "hypnose",
     "name": "Hypnose",
     "type": "Psy",
     "category": "Statut",
@@ -116,7 +127,8 @@
       "chance": 100
     }
   },
-  "cage-eclair": {
+  {
+    "id": "cage-eclair",
     "name": "Cage-Éclair",
     "type": "Électrique",
     "category": "Statut",
@@ -128,7 +140,8 @@
       "chance": 100
     }
   },
-  "fatal-foudre": {
+  {
+    "id": "fatal-foudre",
     "name": "Fatal-Foudre",
     "type": "Électrique",
     "category": "Spécial",
@@ -140,7 +153,8 @@
       "chance": 30
     }
   },
-  "seisme": {
+  {
+    "id": "seisme",
     "name": "Séisme",
     "type": "Sol",
     "category": "Physique",
@@ -149,7 +163,8 @@
     "pp": 10,
     "effect": null
   },
-  "psyko": {
+  {
+    "id": "psyko",
     "name": "Psyko",
     "type": "Psy",
     "category": "Spécial",
@@ -161,7 +176,8 @@
       "chance": 10
     }
   },
-  "laser-glace": {
+  {
+    "id": "laser-glace",
     "name": "Laser Glace",
     "type": "Glace",
     "category": "Spécial",
@@ -173,7 +189,8 @@
       "chance": 10
     }
   },
-  "blizzard": {
+  {
+    "id": "blizzard",
     "name": "Blizzard",
     "type": "Glace",
     "category": "Spécial",
@@ -185,7 +202,8 @@
       "chance": 10
     }
   },
-  "deflagration": {
+  {
+    "id": "deflagration",
     "name": "Déflagration",
     "type": "Feu",
     "category": "Spécial",
@@ -197,7 +215,8 @@
       "chance": 10
     }
   },
-  "surf": {
+  {
+    "id": "surf",
     "name": "Surf",
     "type": "Eau",
     "category": "Spécial",
@@ -206,7 +225,8 @@
     "pp": 15,
     "effect": null
   },
-  "tranch-herbe": {
+  {
+    "id": "tranch-herbe",
     "name": "Tranch'Herbe",
     "type": "Plante",
     "category": "Physique",
@@ -218,7 +238,8 @@
       "chance": 100
     }
   },
-  "poing-de-feu": {
+  {
+    "id": "poing-de-feu",
     "name": "Poing de Feu",
     "type": "Feu",
     "category": "Physique",
@@ -230,7 +251,8 @@
       "chance": 10
     }
   },
-  "poing-glace": {
+  {
+    "id": "poing-glace",
     "name": "Poing Glace",
     "type": "Glace",
     "category": "Physique",
@@ -242,7 +264,8 @@
       "chance": 10
     }
   },
-  "poing-eclair": {
+  {
+    "id": "poing-eclair",
     "name": "Poing Éclair",
     "type": "Électrique",
     "category": "Physique",
@@ -254,7 +277,8 @@
       "chance": 10
     }
   },
-  "secretion": {
+  {
+    "id": "secretion",
     "name": "Sécrétion",
     "type": "Insecte",
     "category": "Statut",
@@ -266,7 +290,8 @@
       "chance": 100
     }
   },
-  "piqure": {
+  {
+    "id": "piqure",
     "name": "Piqûre",
     "type": "Insecte",
     "category": "Physique",
@@ -275,7 +300,8 @@
     "pp": 20,
     "effect": null
   },
-  "jet-de-sable": {
+  {
+    "id": "jet-de-sable",
     "name": "Jet de Sable",
     "type": "Sol",
     "category": "Statut",
@@ -287,7 +313,8 @@
       "chance": 100
     }
   },
-  "tornade": {
+  {
+    "id": "tornade",
     "name": "Tornade",
     "type": "Vol",
     "category": "Spécial",
@@ -296,7 +323,8 @@
     "pp": 35,
     "effect": null
   },
-  "vive-attaque": {
+  {
+    "id": "vive-attaque",
     "name": "Vive-Attaque",
     "type": "Normal",
     "category": "Physique",
@@ -308,7 +336,8 @@
       "chance": 100
     }
   },
-  "croc-fatal": {
+  {
+    "id": "croc-fatal",
     "name": "Croc Fatal",
     "type": "Normal",
     "category": "Physique",
@@ -317,7 +346,8 @@
     "pp": 25,
     "effect": null
   },
-  "ecume": {
+  {
+    "id": "ecume",
     "name": "Écume",
     "type": "Eau",
     "category": "Spécial",
@@ -329,7 +359,8 @@
       "chance": 10
     }
   },
-  "mimi-queue": {
+  {
+    "id": "mimi-queue",
     "name": "Mimi-Queue",
     "type": "Normal",
     "category": "Statut",
@@ -341,7 +372,8 @@
       "chance": 100
     }
   },
-  "abri": {
+  {
+    "id": "abri",
     "name": "Abri",
     "type": "Normal",
     "category": "Statut",
@@ -353,7 +385,8 @@
       "chance": 100
     }
   },
-  "bulle-d-o": {
+  {
+    "id": "bulle-d-o",
     "name": "Bulle d'O",
     "type": "Eau",
     "category": "Spécial",
@@ -365,7 +398,8 @@
       "chance": 10
     }
   },
-  "morsure": {
+  {
+    "id": "morsure",
     "name": "Morsure",
     "type": "Ténèbres",
     "category": "Physique",
@@ -377,7 +411,8 @@
       "chance": 30
     }
   },
-  "danse-pluie": {
+  {
+    "id": "danse-pluie",
     "name": "Danse Pluie",
     "type": "Eau",
     "category": "Statut",
@@ -389,7 +424,8 @@
       "chance": 100
     }
   },
-  "hydro-queue": {
+  {
+    "id": "hydro-queue",
     "name": "Hydro-Queue",
     "type": "Eau",
     "category": "Physique",
@@ -398,4 +434,4 @@
     "pp": 10,
     "effect": null
   }
-} 
+]

@@ -15,109 +15,26 @@ import {
 } from 'discord.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Pokemon, Stats, Move, MovesListType } from './models/Pokemon';
+import { BattleState } from './models/Battle';
+import { Player, Location } from './models/Utils';
+import { POKEMON_SPRITE_URL, HP_BAR_LENGTH, TYPE_EMOJIS, PREFIX } from './utils/Utils';
+import { PokemonService } from './services/PokemonService';
+import { BattleService } from './services/BattleService';
+import { GameService } from './services/GameService';
+
 
 config();
 
+// Initialisation des services
+const pokemonService = new PokemonService();
+const battleService = new BattleService();
+const gameService = new GameService();
+
 // Import des données
-const pkmnList = require('./data/pokemon_data.json');
-const typeChart = require('./data/type_chart.json');
-const movesList = require('./data/moves.json');
-
-// Types pour les structures de données
-
-interface Effect {
-  type: string;
-  chance: number;
-}
-
-interface Move {
-  name: string;
-  power: number;
-  accuracy: number;
-  pp: number;
-  currentPP?: number;
-  type: string;
-  category: 'Physique' | 'Spécial' | 'Statut';
-  effect?: Effect;
-  effectChance?: number;
-}
-
-interface Stats {
-  hp: number;
-  attack: number;
-  defense: number;
-  spAttack: number;
-  spDefense: number;
-  speed: number;
-}
-
-interface Pokemon {
-  name: string;
-  types: string[];
-  baseStats: Stats;
-  learnset: Record<string, string[]>;
-  level?: number;
-  exp?: number;
-  maxExp?: number;
-  stats?: Stats;
-  currentHp?: number;
-  moves?: Move[];
-}
-
-interface Player {
-  location: string;
-  pokemons: Pokemon[];
-}
-
-interface Location {
-  description: string;
-  routes: string[];
-  actions: string[];
-  pokemons: Pokemon[];
-}
-
-interface BattleState {
-  wildPokemon: Pokemon;
-  playerPokemon: Pokemon;
-  wildStatus?: {
-    type: string;
-    turns?: number;
-  };
-  playerStatus?: {
-    type: string;
-    turns?: number;
-  };
-  initialPlayerStats?: Stats;  // Statistiques du Pokémon du joueur au début du combat
-  initialWildStats?: Stats;    // Statistiques du Pokémon sauvage au début du combat
-}
-
-// Constantes
-const POKEMON_SPRITE_URL: string = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/";
-const HP_BAR_LENGTH: number = 10; // Longueur de la barre de vie en caractères
-
-// Émojis de type
-const TYPE_EMOJIS: Record<string, string> = {
-  "Normal": "⚪",
-  "Feu": "🔥",
-  "Eau": "💧",
-  "Plante": "🌱",
-  "Électrique": "⚡",
-  "Glace": "❄️",
-  "Combat": "👊",
-  "Poison": "☠️",
-  "Sol": "🌍",
-  "Vol": "🦅",
-  "Psy": "🔮",
-  "Insecte": "🐛",
-  "Roche": "🪨",
-  "Spectre": "👻",
-  "Dragon": "🐉",
-  "Acier": "⚔️",
-  "Fée": "🎀"
-};
-
-// Préfixe des commandes
-const PREFIX: string = "pkmn";
+const pkmnList = pokemonService.getPokemonList();
+const typeChart = pokemonService.getTypeChart();
+const movesList = pokemonService.getMovesList();
 
 // Collections de données
 const players: Record<string, Player> = {};
@@ -133,9 +50,9 @@ const locations: Record<string, Location> = {
     routes: ["bourg-palette", "jadielle"],
     actions: ["chercher des Pokémon sauvages", "ramasser des baies"],
     pokemons: [
-      getPokemonByName("Rattata"), 
-      getPokemonByName("Roucool"), 
-      getPokemonByName("Chenipan")
+      pokemonService.getPokemonByName("Rattata"), 
+      pokemonService.getPokemonByName("Roucool"), 
+      pokemonService.getPokemonByName("Chenipan")
     ].filter((pokemon): pokemon is Pokemon => pokemon !== null)
   },
   "jadielle": {
@@ -151,26 +68,12 @@ const battleStates: Record<string, BattleState> = {};
 // Ajouter ce type personnalisé au début du fichier
 type NodeCanvasRenderingContext2D = any;
 
-// Fonction pour récupérer un Pokémon par son nom depuis pkmnList
-function getPokemonByName(name: string): Pokemon | null {
-  const pkmn = Object.values(pkmnList).find(
-    p => (p as Pokemon).name.toLowerCase() === name.toLowerCase()
-  ) as Pokemon | undefined;
-  
-  if (!pkmn) return null;
-  return pkmn;
-}
-
 // Fonction pour vérifier si un Custom ID correspond à un starter
 function isStarterByCustomId(customId: string): boolean {
   return starters.some(starter => starter.name.toLowerCase() === customId.toLowerCase());
 }
 
-const starters: Pokemon[] = [
-  getPokemonByName("Bulbizarre"),
-  getPokemonByName("Salamèche"),
-  getPokemonByName("Carapuce")
-].filter((pokemon): pokemon is Pokemon => pokemon !== null);
+const starters: Pokemon[] = pokemonService.getStarters();
 
 // Initialisation du client Discord
 const client = new Client({ 
@@ -219,10 +122,10 @@ client.on('messageCreate', (message: Message) => {
 
 // Fonction pour gérer la commande /start
 function handleStartCommand(message: Message): void {
-  if (players[message.author.id]) {
+  if (gameService.isPlayer(message.author.id)) {
     message.reply(`Tu as déjà commencé ton aventure, ${message.author.username} ! Utilise ${PREFIX} explore pour explorer les environs.`);
   } else {
-    players[message.author.id] = {} as Player;
+    gameService.addPlayer(message.author.id, {} as Player);
     const row = new ActionRowBuilder<ButtonBuilder>()
       .addComponents(
         new ButtonBuilder()
@@ -247,7 +150,7 @@ function handleStartCommand(message: Message): void {
 function handleExploreCommand(interaction: Message | ButtonInteraction): void {
   const userId = interaction instanceof Message ? interaction.author.id : interaction.user.id;
   
-  if (!players[userId]) {
+  if (!gameService.isPlayer(userId)) {
     const reply = { content: "Utilise d'abord pkmn start pour commencer ton aventure !", ephemeral: true };
     
     if (interaction instanceof Message) {
@@ -258,8 +161,8 @@ function handleExploreCommand(interaction: Message | ButtonInteraction): void {
     return;
   }
 
-  const currentLocation = players[userId].location;
-  if (!locations[currentLocation]) {
+  const currentLocation = gameService.getCurrentLocation(userId);
+  if (!gameService.isLocation(currentLocation)) {
     const reply = { content: "La localisation actuelle est invalide. Veuillez redémarrer l'aventure.", ephemeral: true };
     
     if (interaction instanceof Message) {
@@ -270,8 +173,8 @@ function handleExploreCommand(interaction: Message | ButtonInteraction): void {
     return;
   }
   
-  const availableRoutes = locations[currentLocation].routes;
-  const availableActions = locations[currentLocation].actions;
+  const availableRoutes = gameService.getLocation(currentLocation).routes;
+  const availableActions = gameService.getLocation(currentLocation).actions;
 
   const row = new ActionRowBuilder<ButtonBuilder>();
   availableRoutes.forEach(route => {
@@ -306,11 +209,11 @@ function handleExploreCommand(interaction: Message | ButtonInteraction): void {
 
 // Fonction pour gérer la commande /status
 function handleStatusCommand(message: Message): void {
-  if (!players[message.author.id]) {
+  if (!gameService.isPlayer(message.author.id)) {
     message.reply("Utilise d'abord pkmn start pour commencer ton aventure !");
   } else {
-    const location = players[message.author.id].location;
-    const pokemons = players[message.author.id].pokemons.map(pokemon => pokemon.name);
+    const location = gameService.getPlayer(message.author.id).location;
+    const pokemons = gameService.getPlayer(message.author.id).pokemons.map(pokemon => pokemon.name);
     message.reply(`Tu es actuellement à **${location}**. Tes Pokémon : ${pokemons.join(', ')}. Utilise ${PREFIX} explore pour continuer ton exploration.`);
   }
 }
@@ -351,7 +254,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
   }
   
   const userId = interaction.user.id;
-  if (!players[userId]) {
+  if (!gameService.isPlayer(userId)) {
     interaction.reply({ content: "Utilise d'abord pkmn start pour commencer ton aventure !", ephemeral: true });
     return;
   }
@@ -389,6 +292,11 @@ function handleStarterSelection(interaction: ButtonInteraction): void {
       .flatMap(([, moves]) => moves)
       .slice(0, 4); // Maximum 4 attaques
 
+    const moves = starterMoves.map(moveId => ({
+      ...pokemonService.getMoveByID(moveId),
+      currentPP: pokemonService.getMoveByID(moveId)?.pp
+    })) as Move[];
+
     const starterPokemon: Pokemon = {
       ...chosenStarter,
       level: level,
@@ -396,17 +304,12 @@ function handleStarterSelection(interaction: ButtonInteraction): void {
       maxExp: 100,
       stats: stats,
       currentHp: stats.hp,
-      moves: starterMoves.map(moveId => ({
-        ...movesList[moveId],
-        currentPP: movesList[moveId].pp
-      }))
+      moves: moves
     };
     
-    players[userId] = { 
-      location: 'bourg-palette', 
-      pokemons: [starterPokemon]
-    };
-    
+    gameService.updatePlayerLocation(userId, 'bourg-palette');
+    gameService.addPlayerPokemon(userId, starterPokemon);
+
     interaction.reply({
       content: 
         `${interaction.user.username}, tu as choisi **${starterPokemon.name}** niveau ${level} comme starter !\n` +
@@ -421,16 +324,16 @@ function handleStarterSelection(interaction: ButtonInteraction): void {
 // Fonction pour gérer l'exploration de lieux
 function handleLocationExploration(interaction: ButtonInteraction): void {
   const userId = interaction.user.id;
-  const currentLocation = players[userId].location;
-  if (!locations[currentLocation]) {
+  const currentLocation = gameService.getPlayer(userId).location;
+  if (!gameService.isLocation(currentLocation)) {
     interaction.reply({ content: "La localisation actuelle est invalide. Veuillez redémarrer l'aventure.", ephemeral: true });
     return;
   }
-  const availableRoutes = locations[currentLocation].routes;
+  const availableRoutes = gameService.getLocation(currentLocation).routes;
 
   if (availableRoutes.includes(interaction.customId)) {
-    players[userId].location = interaction.customId;
-    const description = locations[interaction.customId].description;
+    gameService.getPlayer(userId).location = interaction.customId;
+    const description = gameService.getLocation(interaction.customId).description;
     interaction.reply({
       content: `Tu es maintenant à **${interaction.customId}**. ${description}`,
       components: [createExploreButton()]
@@ -443,8 +346,8 @@ function handleLocationExploration(interaction: ButtonInteraction): void {
 // Fonction pour gérer les actions dans les lieux
 function handleLocationAction(interaction: ButtonInteraction): void {
   const userId = interaction.user.id;
-  const currentLocation = players[userId].location;
-  if (!locations[currentLocation]) {
+  const currentLocation = gameService.getPlayer(userId).location;
+  if (!gameService.isLocation(currentLocation)) {
     interaction.reply({ content: "La localisation actuelle est invalide. Veuillez redémarrer l'aventure.", ephemeral: true });
     return;
   }
@@ -462,7 +365,7 @@ function handleLocationAction(interaction: ButtonInteraction): void {
 
 // Fonction pour gérer la recherche de Pokémon sauvages
 function handleWildPokemonSearch(interaction: ButtonInteraction, currentLocation: string): void {
-  const wildPokemons = locations[currentLocation].pokemons;
+  const wildPokemons = gameService.getLocation(currentLocation).pokemons;
   if (wildPokemons.length === 0) {
     interaction.reply({ content: "Il n'y a pas de Pokémon sauvages ici.", ephemeral: true });
     return;
@@ -477,7 +380,7 @@ function handleWildPokemonSearch(interaction: ButtonInteraction, currentLocation
   Object.entries(foundPokemon.learnset).forEach(([level, moves]) => {
     if (parseInt(level) <= wildPokemonLevel) {
       moves.forEach(moveId => {
-        const move = movesList[moveId];
+        const move = pokemonService.getMoveByID(moveId);
         if (move) {
           availableMoves.push({
             ...move,
@@ -496,7 +399,7 @@ function handleWildPokemonSearch(interaction: ButtonInteraction, currentLocation
     moves: availableMoves
   };
   
-  const playerPokemon = players[interaction.user.id].pokemons[0];
+  const playerPokemon = gameService.getPlayer(interaction.user.id).pokemons[0];
   
   // Sauvegarde des statistiques initiales
   const initialPlayerStats = playerPokemon.stats ? { ...playerPokemon.stats } : undefined;
@@ -536,114 +439,9 @@ function calculateDamageMultiplier(attackType: string, defenderTypes: string[]):
   return multiplier;
 }
 
-// Fonction pour créer la barre de vie
-function createHPBar(currentHP: number, maxHP: number): string {
-  const percentage = currentHP / maxHP;
-  const filledBars = Math.round(HP_BAR_LENGTH * percentage);
-  const emptyBars = HP_BAR_LENGTH - filledBars;
-  
-  const filledSection = "█".repeat(filledBars);
-  const emptySection = "░".repeat(emptyBars);
-  
-  // Change la couleur en fonction du pourcentage de vie
-  let color;
-  if (percentage > 0.5) color = "🟩"; // Vert
-  else if (percentage > 0.2) color = "🟨"; // Jaune
-  else color = "🟥"; // Rouge
-  
-  return `${color} ${filledSection}${emptySection} ${Math.ceil(currentHP)}/${maxHP}`;
-}
-
 // Fonction pour obtenir les émojis de type d'un Pokémon
 function getTypeEmojis(pokemon: Pokemon): string {
   return pokemon.types.map(type => TYPE_EMOJIS[type] || "❓").join(" ");
-}
-
-// Fonction pour dessiner une croix rouge sur un Pokémon KO
-function drawKOCross(ctx: NodeCanvasRenderingContext2D, x: number, y: number, size: number): void {
-  ctx.strokeStyle = '#FF0000';
-  ctx.lineWidth = 8;
-  ctx.lineCap = 'round';
-  
-  // Dessiner la première ligne de la croix (\)
-  ctx.beginPath();
-  ctx.moveTo(x - size/2, y - size/2);
-  ctx.lineTo(x + size/2, y + size/2);
-  ctx.stroke();
-  
-  // Dessiner la deuxième ligne de la croix (/)
-  ctx.beginPath();
-  ctx.moveTo(x + size/2, y - size/2);
-  ctx.lineTo(x - size/2, y + size/2);
-  ctx.stroke();
-}
-
-// Fonction pour créer l'image de bataille
-async function createBattleImage(battleState: BattleState): Promise<Buffer> {
-  const canvas = new Canvas(512, 256);
-  const ctx = canvas.getContext('2d');
-
-  // Définir un fond noir semi-transparent
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Chargement des images
-  const playerSprite = await loadImage(
-    `${POKEMON_SPRITE_URL}${getPokemonId(battleState.playerPokemon.name)}.png`
-  );
-  const wildSprite = await loadImage(
-    `${POKEMON_SPRITE_URL}${getPokemonId(battleState.wildPokemon.name)}.png`
-  );
-
-  // Position des Pokémon
-  const playerX = 64;
-  const wildX = 320;
-  const y = 48;
-  const size = 128;
-
-  // Dessiner le Pokémon du joueur à gauche
-  ctx.drawImage(playerSprite, playerX, y, size, size);
-  if (battleState.playerPokemon.currentHp !== undefined && battleState.playerPokemon.currentHp <= 0) {
-    drawKOCross(ctx, playerX + size/2, y + size/2, size);
-  }
-  
-  // Dessiner le Pokémon sauvage à droite
-  ctx.drawImage(wildSprite, wildX, y, size, size);
-  if (battleState.wildPokemon.currentHp !== undefined && battleState.wildPokemon.currentHp <= 0) {
-    drawKOCross(ctx, wildX + size/2, y + size/2, size);
-  }
-
-  // Configurer le style du VS
-  ctx.font = 'bold 72px Arial';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  // Créer l'effet d'ombre pour le VS
-  ctx.fillStyle = '#FF4400';
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 6;
-  
-  // Position du VS
-  const x = canvas.width / 2;
-  const y2 = canvas.height / 2;
-
-  // Dessiner l'ombre du VS
-  ctx.strokeText('VS', x, y2);
-  
-  // Dessiner le VS avec un dégradé
-  const gradient = ctx.createLinearGradient(x - 30, y2 - 30, x + 30, y2 + 30);
-  gradient.addColorStop(0, '#FF4400');
-  gradient.addColorStop(0.5, '#FFFF00');
-  gradient.addColorStop(1, '#FF4400');
-  ctx.fillStyle = gradient;
-  ctx.fillText('VS', x, y2);
-
-  // Ajouter un effet de lueur
-  ctx.shadowColor = '#FF4400';
-  ctx.shadowBlur = 15;
-  ctx.fillText('VS', x, y2);
-
-  return canvas.toBuffer();
 }
 
 // Fonction pour gérer les combats
@@ -669,7 +467,7 @@ async function handleBattle(interaction: ButtonInteraction): Promise<void> {
   const wildMaxHP = wildPokemon.stats?.hp || 0;
 
   // Créer l'image de combat
-  const battleImage = await createBattleImage(battleState);
+  const battleImage = await battleService.createBattleImage(battleState);
   
   // Créer l'attachment pour Discord
   const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
@@ -681,7 +479,7 @@ async function handleBattle(interaction: ButtonInteraction): Promise<void> {
     fields: [
       {
         name: `${getTypeEmojis(playerPokemon)} ${playerPokemon.name} Nv.${playerPokemon.level}`,
-        value: `${createHPBar(playerPokemon.currentHp || 0, playerMaxHP)}`,
+        value: `${battleService.createHPBar(playerPokemon.currentHp || 0, playerMaxHP)}`,
         inline: true
       },
       {
@@ -691,7 +489,7 @@ async function handleBattle(interaction: ButtonInteraction): Promise<void> {
       },
       {
         name: `${getTypeEmojis(wildPokemon)} ${wildPokemon.name} Nv.${wildPokemon.level}`,
-        value: `${createHPBar(wildPokemon.currentHp || 0, wildMaxHP)}`,
+        value: `${battleService.createHPBar(wildPokemon.currentHp || 0, wildMaxHP)}`,
         inline: true
       }
     ],
@@ -701,14 +499,17 @@ async function handleBattle(interaction: ButtonInteraction): Promise<void> {
   };
 
   const row = new ActionRowBuilder<ButtonBuilder>();
-  if (playerPokemon.moves) {
+
+  if (playerPokemon.moves && Array.isArray(playerPokemon.moves)) {
     playerPokemon.moves.forEach(move => {
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`attack_${move.name.toLowerCase().replace(/\s+/g, '_')}`)
-          .setLabel(`${move.name} (${move.currentPP}/${move.pp})`)
-          .setStyle(ButtonStyle.Primary)
-      );
+      if (move && move.name) {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`attack_${move.name.toLowerCase().replace(/\s+/g, '_')}`)
+            .setLabel(`${move.name} (${move.currentPP}/${move.pp})`)
+            .setStyle(ButtonStyle.Primary)
+        );
+      }
     });
   }
 
@@ -837,7 +638,7 @@ async function handleAttack(interaction: ButtonInteraction, moveName: string): P
       `\nTon ${firstAttacker.opponent.name} est K.O. !`;
     
     // Créer l'image de combat
-    const battleImage = await createBattleImage(battleState);
+    const battleImage = await battleService.createBattleImage(battleState);
     const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
     
     interaction.reply({
@@ -928,7 +729,7 @@ async function handleAttack(interaction: ButtonInteraction, moveName: string): P
       `\nLe ${defeatedPokemon.name} sauvage est K.O. !`;
     
     // Créer l'image de combat
-    const battleImage = await createBattleImage(battleState);
+    const battleImage = await battleService.createBattleImage(battleState);
     const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
     
     interaction.reply({
@@ -969,7 +770,7 @@ async function handleAttack(interaction: ButtonInteraction, moveName: string): P
   );
 
   // Créer l'image de combat mise à jour
-  const battleImage = await createBattleImage(battleState);
+  const battleImage = await battleService.createBattleImage(battleState);
   const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
 
   interaction.reply({
@@ -1046,16 +847,6 @@ function calculateStats(pokemon: Pokemon, level: number): Stats {
   });
   
   return stats;
-}
-
-// Fonction pour obtenir l'ID du Pokémon
-function getPokemonId(pokemonName: string): string {
-  for (const [id, pokemon] of Object.entries(pkmnList)) {
-    if ((pokemon as Pokemon).name === pokemonName) {
-      return id;
-    }
-  }
-  return "0"; // Sprite par défaut si non trouvé
 }
 
 // Fonction pour appliquer les effets des attaques
@@ -1200,7 +991,7 @@ const createBattleEmbed = (battleState: BattleState, message: string) => {
   const fields: EmbedField[] = [
     {
       name: `${getTypeEmojis(battleState.playerPokemon)} ${battleState.playerPokemon.name} Nv.${battleState.playerPokemon.level}`,
-      value: createHPBar(battleState.playerPokemon.currentHp || 0, battleState.playerPokemon.stats?.hp || 0),
+      value: battleService.createHPBar(battleState.playerPokemon.currentHp || 0, battleState.playerPokemon.stats?.hp || 0),
       inline: true
     },
     {
@@ -1210,7 +1001,7 @@ const createBattleEmbed = (battleState: BattleState, message: string) => {
     },
     {
       name: `${getTypeEmojis(battleState.wildPokemon)} ${battleState.wildPokemon.name} Nv.${battleState.wildPokemon.level}`,
-      value: createHPBar(battleState.wildPokemon.currentHp || 0, battleState.wildPokemon.stats?.hp || 0),
+      value: battleService.createHPBar(battleState.wildPokemon.currentHp || 0, battleState.wildPokemon.stats?.hp || 0),
       inline: true
     },
     {
@@ -1569,7 +1360,7 @@ function handleResetGameCommand(message: Message): void {
   const userId = message.author.id;
   
   // Vérifier si le joueur existe
-  if (!players[userId]) {
+  if (!gameService.isPlayer(userId)) {
     message.reply("Tu n'as pas encore commencé d'aventure. Utilise `pkmn start` pour commencer.");
     return;
   }
@@ -1617,7 +1408,7 @@ async function handleConfirmReset(interaction: ButtonInteraction): Promise<void>
 function saveGameData(): void {
   // Créer l'objet de données à sauvegarder
   const gameData = {
-    players,
+    players: gameService.getPlayers(),
     // Ne pas sauvegarder les états de bataille car ils contiennent des références circulaires
     // et nécessitent des objets Canvas qui ne peuvent pas être sérialisés
   };
@@ -1675,4 +1466,4 @@ process.on('SIGTERM', () => {
 });
 
 // Connecter le bot
-client.login(process.env.TOKEN); 
+client.login(process.env.DISCORD_TOKEN); 

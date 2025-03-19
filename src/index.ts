@@ -63,8 +63,6 @@ const locations: Record<string, Location> = {
   }
 };
 
-const battleStates: Record<string, BattleState> = {};
-
 // Ajouter ce type personnalisé au début du fichier
 type NodeCanvasRenderingContext2D = any;
 
@@ -89,10 +87,10 @@ client.once('ready', () => {
   client.user?.setActivity('Pokémon', { type: ActivityType.Playing });
   
   // Charger les données de jeu au démarrage
-  loadGameData();
+  gameService.loadGameData();
   
   // Configurer une sauvegarde automatique toutes les 5 minutes
-  setInterval(saveGameData, 5 * 60 * 1000);
+  setInterval(gameService.saveGameData, 5 * 60 * 1000);
 });
 
 // Command handler
@@ -105,118 +103,20 @@ client.on('messageCreate', (message: Message) => {
   const command: string = args.shift()?.toLowerCase() || '';
 
   if (command === 'start') {
-    handleStartCommand(message);
+    gameService.handleStartCommand(message);
   } else if (command === 'explore') {
-    handleExploreCommand(message);
+    gameService.handleExploreCommand(message);
   } else if (command === 'status') {
-    handleStatusCommand(message);
+    gameService.handleStatusCommand(message);
   } else if (command === 'battle' && args[0] === 'stats') {
     handleBattleStatsCommand(message, args);
   } else if (command === 'reset') {
     handleResetGameCommand(message);
   } else if (command === 'save') {
-    saveGameData();
+    gameService.saveGameData();
     message.reply("🔄 Jeu sauvegardé avec succès !");
   }
 });
-
-// Fonction pour gérer la commande /start
-function handleStartCommand(message: Message): void {
-  if (gameService.isPlayer(message.author.id)) {
-    message.reply(`Tu as déjà commencé ton aventure, ${message.author.username} ! Utilise ${PREFIX} explore pour explorer les environs.`);
-  } else {
-    gameService.addPlayer(message.author.id, {} as Player);
-    const row = new ActionRowBuilder<ButtonBuilder>()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(starters[0].name.toLowerCase())
-          .setLabel(starters[0].name)
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(starters[1].name.toLowerCase())
-          .setLabel(starters[1].name)
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId(starters[2].name.toLowerCase())
-          .setLabel(starters[2].name)
-          .setStyle(ButtonStyle.Primary)
-      );
-
-    message.reply({ content: `Bienvenue dans le monde de Pokémon, ${message.author.username} ! Choisis ton starter :`, components: [row] });
-  }
-}
-
-// Fonction pour gérer la commande /explore
-function handleExploreCommand(interaction: Message | ButtonInteraction): void {
-  const userId = interaction instanceof Message ? interaction.author.id : interaction.user.id;
-  
-  if (!gameService.isPlayer(userId)) {
-    const reply = { content: "Utilise d'abord pkmn start pour commencer ton aventure !", ephemeral: true };
-    
-    if (interaction instanceof Message) {
-      interaction.reply(reply);
-    } else {
-      interaction.reply(reply);
-    }
-    return;
-  }
-
-  const currentLocation = gameService.getCurrentLocation(userId);
-  if (!gameService.isLocation(currentLocation)) {
-    const reply = { content: "La localisation actuelle est invalide. Veuillez redémarrer l'aventure.", ephemeral: true };
-    
-    if (interaction instanceof Message) {
-      interaction.reply(reply);
-    } else {
-      interaction.reply(reply);
-    }
-    return;
-  }
-  
-  const availableRoutes = gameService.getLocation(currentLocation).routes;
-  const availableActions = gameService.getLocation(currentLocation).actions;
-
-  const row = new ActionRowBuilder<ButtonBuilder>();
-  availableRoutes.forEach(route => {
-    row.addComponents(
-      new ButtonBuilder()
-        .setCustomId(route)
-        .setLabel(route.charAt(0).toUpperCase() + route.slice(1))
-        .setStyle(ButtonStyle.Primary)
-    );
-  });
-  
-  availableActions.forEach(action => {
-    row.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`action_${action.replace(/\s+/g, '_').toLowerCase()}`)
-        .setLabel(action)
-        .setStyle(ButtonStyle.Secondary)
-    );
-  });
-
-  const reply = { 
-    content: `Où veux-tu aller depuis **${currentLocation}** ou quelle action veux-tu entreprendre ?`, 
-    components: [row] 
-  };
-  
-  if (interaction instanceof Message) {
-    interaction.reply(reply);
-  } else {
-    interaction.reply(reply);
-  }
-}
-
-// Fonction pour gérer la commande /status
-function handleStatusCommand(message: Message): void {
-  if (!gameService.isPlayer(message.author.id)) {
-    message.reply("Utilise d'abord pkmn start pour commencer ton aventure !");
-  } else {
-    const location = gameService.getPlayer(message.author.id).location;
-    const pokemons = gameService.getPlayer(message.author.id).pokemons.map(pokemon => pokemon.name);
-    message.reply(`Tu es actuellement à **${location}**. Tes Pokémon : ${pokemons.join(', ')}. Utilise ${PREFIX} explore pour continuer ton exploration.`);
-  }
-}
 
 // Fonction pour créer le bouton Explorer
 function createExploreButton(): ActionRowBuilder<ButtonBuilder> {
@@ -260,13 +160,13 @@ client.on('interactionCreate', async (interaction: Interaction) => {
   }
 
   if (buttonId === 'explore_location') {
-    handleExploreCommand(interaction);
+    gameService.handleExploreCommand(interaction);
   } else if (isStarterByCustomId(buttonId)) {
-    handleStarterSelection(interaction);
+    gameService.handleStarterSelection(interaction);
   } else if (buttonId.startsWith('action_')) {
     handleLocationAction(interaction);
   } else if (buttonId.startsWith('battle_')) {
-    handleBattle(interaction);
+    battleService.handleBattle(interaction);
   } else if (buttonId.startsWith('attack_')) {
     const moveName = buttonId.replace('attack_', '').replace(/_/g, ' ');
     handleAttack(interaction, moveName);
@@ -277,49 +177,7 @@ client.on('interactionCreate', async (interaction: Interaction) => {
   }
 });
 
-// Fonction pour gérer la sélection de starter
-function handleStarterSelection(interaction: ButtonInteraction): void {
-  const userId = interaction.user.id;
-  let chosenStarter = starters.find(starter => starter.name.toLowerCase() === interaction.customId.toLowerCase());
 
-  if (chosenStarter) {
-    const level = 5;
-    const stats = calculateStats(chosenStarter, level);
-    
-    // Récupération des attaques de départ depuis le learnset
-    const starterMoves = Object.entries(chosenStarter.learnset)
-      .filter(([reqLevel]) => parseInt(reqLevel) <= level)
-      .flatMap(([, moves]) => moves)
-      .slice(0, 4); // Maximum 4 attaques
-
-    const moves = starterMoves.map(moveId => ({
-      ...pokemonService.getMoveByID(moveId),
-      currentPP: pokemonService.getMoveByID(moveId)?.pp
-    })) as Move[];
-
-    const starterPokemon: Pokemon = {
-      ...chosenStarter,
-      level: level,
-      exp: 0,
-      maxExp: 100,
-      stats: stats,
-      currentHp: stats.hp,
-      moves: moves
-    };
-    
-    gameService.updatePlayerLocation(userId, 'bourg-palette');
-    gameService.addPlayerPokemon(userId, starterPokemon);
-
-    interaction.reply({
-      content: 
-        `${interaction.user.username}, tu as choisi **${starterPokemon.name}** niveau ${level} comme starter !\n` +
-        `Stats: PV ${stats.hp}, Attaque ${stats.attack}, Défense ${stats.defense}, ` +
-        `Attaque Spé ${stats.spAttack}, Défense Spé ${stats.spDefense}, Vitesse ${stats.speed}\n` +
-        `Attaques: ${starterPokemon.moves?.map(move => move.name).join(", ") || "Aucune attaque"}`,
-      components: [createExploreButton()]
-    });
-  }
-}
 
 // Fonction pour gérer l'exploration de lieux
 function handleLocationExploration(interaction: ButtonInteraction): void {
@@ -354,80 +212,13 @@ function handleLocationAction(interaction: ButtonInteraction): void {
   const action = interaction.customId.replace('action_', '').replace(/_/g, ' ');
 
   if (action === 'chercher des pokémon sauvages') {
-    handleWildPokemonSearch(interaction, currentLocation);
+    gameService.handleWildPokemonSearch(interaction, currentLocation);
   } else {
     interaction.reply({
       content: `${interaction.user.username}, tu as choisi de **${action}** à **${currentLocation}**.`,
       components: [createExploreButton()]
     });
   }
-}
-
-// Fonction pour gérer la recherche de Pokémon sauvages
-function handleWildPokemonSearch(interaction: ButtonInteraction, currentLocation: string): void {
-  const wildPokemons = gameService.getLocation(currentLocation).pokemons;
-  if (wildPokemons.length === 0) {
-    interaction.reply({ content: "Il n'y a pas de Pokémon sauvages ici.", ephemeral: true });
-    return;
-  }
-  
-  const foundPokemon = wildPokemons[Math.floor(Math.random() * wildPokemons.length)];
-  const wildPokemonLevel = 5;
-  const wildPokemonStats = calculateStats(foundPokemon, wildPokemonLevel);
-
-  // Récupération des attaques disponibles pour le niveau du Pokémon
-  const availableMoves: Move[] = [];
-  Object.entries(foundPokemon.learnset).forEach(([level, moves]) => {
-    if (parseInt(level) <= wildPokemonLevel) {
-      moves.forEach(moveId => {
-        const move = pokemonService.getMoveByID(moveId);
-        if (move) {
-          availableMoves.push({
-            ...move,
-            currentPP: move.pp
-          });
-        }
-      });
-    }
-  });
-  
-  const wildPokemonInstance: Pokemon = {
-    ...foundPokemon,
-    level: wildPokemonLevel,
-    stats: wildPokemonStats,
-    currentHp: wildPokemonStats.hp,
-    moves: availableMoves
-  };
-  
-  const playerPokemon = gameService.getPlayer(interaction.user.id).pokemons[0];
-  
-  // Sauvegarde des statistiques initiales
-  const initialPlayerStats = playerPokemon.stats ? { ...playerPokemon.stats } : undefined;
-  const initialWildStats = { ...wildPokemonStats };
-
-  const row = new ActionRowBuilder<ButtonBuilder>()
-    .addComponents(
-      new ButtonBuilder()
-        .setCustomId(`battle_${foundPokemon.name.toLowerCase()}`)
-        .setLabel('Combattre')
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId('flee')
-        .setLabel('Fuir')
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-  battleStates[interaction.user.id] = {
-    wildPokemon: wildPokemonInstance,
-    playerPokemon: playerPokemon,
-    initialPlayerStats,
-    initialWildStats
-  };
-
-  interaction.reply({ 
-    content: `${interaction.user.username}, tu as trouvé un **${foundPokemon.name}** sauvage niveau ${wildPokemonLevel} ! Que souhaites-tu faire ?`,
-    components: [row]
-  });
 }
 
 // Fonction pour calculer le multiplicateur de dégâts
@@ -439,107 +230,10 @@ function calculateDamageMultiplier(attackType: string, defenderTypes: string[]):
   return multiplier;
 }
 
-// Fonction pour obtenir les émojis de type d'un Pokémon
-function getTypeEmojis(pokemon: Pokemon): string {
-  return pokemon.types.map(type => TYPE_EMOJIS[type] || "❓").join(" ");
-}
-
-// Fonction pour gérer les combats
-async function handleBattle(interaction: ButtonInteraction): Promise<void> {
-  const battleState = battleStates[interaction.user.id];
-  if (!battleState) {
-    interaction.reply({ content: "Aucun combat en cours.", ephemeral: true });
-    return;
-  }
-
-  const playerPokemon = battleState.playerPokemon;
-  const wildPokemon = battleState.wildPokemon;
-
-  // Sauvegarder les statistiques initiales si elles n'existent pas encore
-  if (!battleState.initialPlayerStats && playerPokemon.stats) {
-    battleState.initialPlayerStats = { ...playerPokemon.stats };
-  }
-  if (!battleState.initialWildStats && wildPokemon.stats) {
-    battleState.initialWildStats = { ...wildPokemon.stats };
-  }
-
-  const playerMaxHP = playerPokemon.stats?.hp || 0;
-  const wildMaxHP = wildPokemon.stats?.hp || 0;
-
-  // Créer l'image de combat
-  const battleImage = await battleService.createBattleImage(battleState);
-  
-  // Créer l'attachment pour Discord
-  const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
-
-  const battleEmbed = {
-    color: 0x0099FF,
-    title: '⚔️ Combat Pokémon',
-    description: '\u200b',
-    fields: [
-      {
-        name: `${getTypeEmojis(playerPokemon)} ${playerPokemon.name} Nv.${playerPokemon.level}`,
-        value: `${battleService.createHPBar(playerPokemon.currentHp || 0, playerMaxHP)}`,
-        inline: true
-      },
-      {
-        name: '\u200b',
-        value: 'VS',
-        inline: true
-      },
-      {
-        name: `${getTypeEmojis(wildPokemon)} ${wildPokemon.name} Nv.${wildPokemon.level}`,
-        value: `${battleService.createHPBar(wildPokemon.currentHp || 0, wildMaxHP)}`,
-        inline: true
-      }
-    ],
-    image: {
-      url: 'attachment://battle.png'
-    }
-  };
-
-  const row = new ActionRowBuilder<ButtonBuilder>();
-
-  if (playerPokemon.moves && Array.isArray(playerPokemon.moves)) {
-    playerPokemon.moves.forEach(move => {
-      if (move && move.name) {
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId(`attack_${move.name.toLowerCase().replace(/\s+/g, '_')}`)
-            .setLabel(`${move.name} (${move.currentPP}/${move.pp})`)
-            .setStyle(ButtonStyle.Primary)
-        );
-      }
-    });
-  }
-
-  // Ajouter un bouton pour les statistiques
-  row.addComponents(
-    new ButtonBuilder()
-      .setCustomId('battle_stats')
-      .setLabel('Statistiques')
-      .setStyle(ButtonStyle.Secondary)
-  );
-  
-  // Ajouter un bouton pour fuir
-  row.addComponents(
-    new ButtonBuilder()
-      .setCustomId('flee')
-      .setLabel('Fuir')
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  interaction.reply({
-    embeds: [battleEmbed],
-    files: [attachment],
-    content: `Que doit faire **${battleState.playerPokemon.name}** ?`,
-    components: [row]
-  });
-}
 
 // Fonction pour gérer les attaques
 async function handleAttack(interaction: ButtonInteraction, moveName: string): Promise<void> {
-  const battleState = battleStates[interaction.user.id];
+  const battleState = battleService.battleStates[interaction.user.id];
   if (!battleState) {
     interaction.reply({ content: "Aucun combat en cours.", ephemeral: true });
     return;
@@ -632,7 +326,7 @@ async function handleAttack(interaction: ButtonInteraction, moveName: string): P
 
   // Vérifie si le combat est terminé après la première attaque
   if (firstAttacker.opponent.currentHp === 0) {
-    delete battleStates[interaction.user.id];
+    delete battleService.battleStates[interaction.user.id];
     const defeatMessage = firstAttacker.isPlayer ? 
       `\nLe ${firstAttacker.opponent.name} sauvage est K.O. !` : 
       `\nTon ${firstAttacker.opponent.name} est K.O. !`;
@@ -723,7 +417,7 @@ async function handleAttack(interaction: ButtonInteraction, moveName: string): P
     const defeatedPokemon = battleState.playerPokemon.currentHp === 0 ? battleState.playerPokemon : battleState.wildPokemon;
     const isPlayerDefeated = battleState.playerPokemon.currentHp === 0;
     
-    delete battleStates[interaction.user.id];
+    delete battleService.battleStates[interaction.user.id];
     const defeatMessage = isPlayerDefeated ? 
       `\nTon ${defeatedPokemon.name} est K.O. !` : 
       `\nLe ${defeatedPokemon.name} sauvage est K.O. !`;
@@ -819,35 +513,14 @@ function getStatusMessage(effectType: string): string {
 
 // Fonction pour fuir le combat
 function handleFlee(interaction: ButtonInteraction): void {
-  delete battleStates[interaction.user.id];
+  delete battleService.battleStates[interaction.user.id];
   interaction.reply({
     content: "Tu as fui le combat !",
     components: [createExploreButton()]
   });
 }
 
-// Fonction pour calculer les statistiques d'un Pokémon
-function calculateStats(pokemon: Pokemon, level: number): Stats {
-  const stats: Stats = {
-    hp: 0,
-    attack: 0,
-    defense: 0,
-    spAttack: 0,
-    spDefense: 0,
-    speed: 0
-  };
-  
-  // Calcul des PV
-  stats.hp = Math.floor(((2 * pokemon.baseStats.hp + 31 + Math.floor(252/4)) * level) / 100 + level + 10);
-  
-  // Calcul des autres stats
-  const otherStats: (keyof Stats)[] = ['attack', 'defense', 'spAttack', 'spDefense', 'speed'];
-  otherStats.forEach(stat => {
-    stats[stat] = Math.floor(((2 * pokemon.baseStats[stat] + 31 + Math.floor(252/4)) * level) / 100 + 5);
-  });
-  
-  return stats;
-}
+
 
 // Fonction pour appliquer les effets des attaques
 function applyMoveEffect(attacker: { pokemon: Pokemon, isPlayer: boolean }, defender: { pokemon: Pokemon, isPlayer: boolean }, move: Move, battleState: BattleState): string {
@@ -990,7 +663,7 @@ function applyStatusEffects(battleState: BattleState): string {
 const createBattleEmbed = (battleState: BattleState, message: string) => {
   const fields: EmbedField[] = [
     {
-      name: `${getTypeEmojis(battleState.playerPokemon)} ${battleState.playerPokemon.name} Nv.${battleState.playerPokemon.level}`,
+      name: `${GameService.getTypeEmojis(battleState.playerPokemon)} ${battleState.playerPokemon.name} Nv.${battleState.playerPokemon.level}`,
       value: battleService.createHPBar(battleState.playerPokemon.currentHp || 0, battleState.playerPokemon.stats?.hp || 0),
       inline: true
     },
@@ -1000,7 +673,7 @@ const createBattleEmbed = (battleState: BattleState, message: string) => {
       inline: true
     },
     {
-      name: `${getTypeEmojis(battleState.wildPokemon)} ${battleState.wildPokemon.name} Nv.${battleState.wildPokemon.level}`,
+      name: `${GameService.getTypeEmojis(battleState.wildPokemon)} ${battleState.wildPokemon.name} Nv.${battleState.wildPokemon.level}`,
       value: battleService.createHPBar(battleState.wildPokemon.currentHp || 0, battleState.wildPokemon.stats?.hp || 0),
       inline: true
     },
@@ -1037,7 +710,7 @@ function calculateTypeEffectivenessAgainst(attackType: string, defenderTypes: st
 // Fonction pour afficher les statistiques détaillées du combat en cours
 async function handleBattleStatsCommand(message: Message, args: string[]): Promise<void> {
   const userId = message.author.id;
-  const battleState = battleStates[userId];
+  const battleState = battleService.battleStates[userId];
   
   if (!battleState) {
     message.reply("Aucun combat n'est en cours actuellement.");
@@ -1192,7 +865,7 @@ async function handleBattleStatsCommand(message: Message, args: string[]): Promi
 // Fonction pour gérer l'interaction avec le bouton des statistiques de combat
 async function handleBattleStatsInteraction(interaction: ButtonInteraction): Promise<void> {
   const userId = interaction.user.id;
-  const battleState = battleStates[userId];
+  const battleState = battleService.battleStates[userId];
   
   if (!battleState) {
     interaction.reply({ content: "Aucun combat n'est en cours actuellement.", ephemeral: true });
@@ -1389,13 +1062,13 @@ async function handleConfirmReset(interaction: ButtonInteraction): Promise<void>
   const userId = interaction.user.id;
   
   // Supprimer les données du joueur
-  delete players[userId];
+  delete gameService.players[userId];
   
   // Supprimer tout état de bataille actif
-  delete battleStates[userId];
+  delete battleService.battleStates[userId];
   
   // Sauvegarder les changements
-  saveGameData();
+  gameService.saveGameData();
   
   // Envoyer un message de confirmation
   await interaction.update({
@@ -1404,64 +1077,16 @@ async function handleConfirmReset(interaction: ButtonInteraction): Promise<void>
   });
 }
 
-// Fonction pour sauvegarder les données du jeu
-function saveGameData(): void {
-  // Créer l'objet de données à sauvegarder
-  const gameData = {
-    players: gameService.getPlayers(),
-    // Ne pas sauvegarder les états de bataille car ils contiennent des références circulaires
-    // et nécessitent des objets Canvas qui ne peuvent pas être sérialisés
-  };
-
-  try {
-    // Assurer que le dossier data existe
-    const dataDir = path.join(__dirname, 'data');
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-
-    // Sauvegarder les données dans un fichier JSON
-    const savePath = path.join(dataDir, 'game_save.json');
-    fs.writeFileSync(savePath, JSON.stringify(gameData, null, 2), 'utf8');
-    console.log(`Données de jeu sauvegardées dans ${savePath}`);
-  } catch (error) {
-    console.error('Erreur lors de la sauvegarde des données du jeu:', error);
-  }
-}
-
-// Fonction pour charger les données du jeu
-function loadGameData(): void {
-  try {
-    const savePath = path.join(__dirname, 'data', 'game_save.json');
-    
-    // Vérifier si le fichier de sauvegarde existe
-    if (fs.existsSync(savePath)) {
-      const saveData = JSON.parse(fs.readFileSync(savePath, 'utf8'));
-      
-      // Restaurer les données des joueurs
-      if (saveData.players) {
-        Object.assign(players, saveData.players);
-        console.log('Données des joueurs chargées avec succès');
-      }
-      
-      // Les états de bataille ne sont pas restaurés car ils nécessitent des objets Canvas
-      // et contiennent des références circulaires
-    }
-  } catch (error) {
-    console.error('Erreur lors du chargement des données du jeu:', error);
-  }
-}
-
 // Ajouter un gestionnaire pour sauvegarder les données avant la fermeture
 process.on('SIGINT', () => {
   console.log('Sauvegarde des données avant fermeture...');
-  saveGameData();
+  gameService.saveGameData();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.log('Sauvegarde des données avant fermeture...');
-  saveGameData();
+  gameService.saveGameData();
   process.exit(0);
 });
 

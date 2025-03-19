@@ -1,10 +1,16 @@
 import { BattleState } from "../models/Battle";
 import { Canvas, loadImage } from 'canvas';
 import { HP_BAR_LENGTH, POKEMON_SPRITE_URL } from "../utils/Utils";
-
+import { ButtonStyle } from "discord.js";
+import { ButtonBuilder } from "discord.js";
+import { ActionRowBuilder } from "discord.js";
+import { AttachmentBuilder } from "discord.js";
+import { ButtonInteraction } from "discord.js";
+import { GameService } from "./GameService";
 type NodeCanvasRenderingContext2D = any;
 
 export class BattleService {
+    public battleStates: Record<string, BattleState> = {};
 
     // Fonction pour dessiner une croix rouge sur un Pokémon KO
     private drawKOCross(ctx: NodeCanvasRenderingContext2D, x: number, y: number, size: number): void {
@@ -109,5 +115,98 @@ export class BattleService {
         else color = "🟥"; // Rouge
         
         return `${color} ${filledSection}${emptySection} ${Math.ceil(currentHP)}/${maxHP}`;
+    }
+
+    // Fonction pour gérer les combats
+    public async handleBattle(interaction: ButtonInteraction): Promise<void> {
+        const battleState = this.battleStates[interaction.user.id];
+        if (!battleState) {
+            interaction.reply({ content: "Aucun combat en cours.", ephemeral: true });
+            return;
+        }
+
+        const playerPokemon = battleState.playerPokemon;
+        const wildPokemon = battleState.wildPokemon;
+
+        // Sauvegarder les statistiques initiales si elles n'existent pas encore
+        if (!battleState.initialPlayerStats && playerPokemon.stats) {
+            battleState.initialPlayerStats = { ...playerPokemon.stats };
+        }
+        if (!battleState.initialWildStats && wildPokemon.stats) {
+            battleState.initialWildStats = { ...wildPokemon.stats };
+        }
+
+        const playerMaxHP = playerPokemon.stats?.hp || 0;
+        const wildMaxHP = wildPokemon.stats?.hp || 0;
+
+        // Créer l'image de combat
+        const battleImage = await this.createBattleImage(battleState);
+
+        // Créer l'attachment pour Discord
+        const attachment = new AttachmentBuilder(battleImage, { name: 'battle.png' });
+
+        const battleEmbed = {
+            color: 0x0099FF,
+            title: '⚔️ Combat Pokémon',
+            description: '\u200b',
+            fields: [
+                {
+                    name: `${GameService.getTypeEmojis(playerPokemon)} ${playerPokemon.name} Nv.${playerPokemon.level}`,
+                    value: `${this.createHPBar(playerPokemon.currentHp || 0, playerMaxHP)}`,
+                    inline: true
+                },
+                {
+                    name: '\u200b',
+                    value: 'VS',
+                    inline: true
+                },
+                {
+                    name: `${GameService.getTypeEmojis(wildPokemon)} ${wildPokemon.name} Nv.${wildPokemon.level}`,
+                    value: `${this.createHPBar(wildPokemon.currentHp || 0, wildMaxHP)}`,
+                    inline: true
+                }
+            ],
+            image: {
+                url: 'attachment://battle.png'
+            }
+        };
+
+        const row = new ActionRowBuilder<ButtonBuilder>();
+
+        if (playerPokemon.moves && Array.isArray(playerPokemon.moves)) {
+            playerPokemon.moves.forEach(move => {
+                if (move && move.name) {
+                    row.addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`attack_${move.name.toLowerCase().replace(/\s+/g, '_')}`)
+                            .setLabel(`${move.name} (${move.currentPP}/${move.pp})`)
+                            .setStyle(ButtonStyle.Primary)
+                    );
+                }
+            });
+        }
+
+        // Ajouter un bouton pour les statistiques
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId('battle_stats')
+                .setLabel('Statistiques')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        // Ajouter un bouton pour fuir
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId('flee')
+                .setLabel('Fuir')
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        interaction.reply({
+            embeds: [battleEmbed],
+            files: [attachment],
+            content: `Que doit faire **${battleState.playerPokemon.name}** ?`,
+            components: [row]
+        });
     }
 }
